@@ -40,4 +40,3 @@ les enregistrements DNS qui pointent vers cet hébergement.
 
 Le portail ne protège pas les futurs outils privés : chacun devra conserver
 son propre contrôle d’accès et un hébergement compatible avec ses besoins.
-
