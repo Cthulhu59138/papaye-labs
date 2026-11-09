@@ -6,7 +6,7 @@ Accueil sur https://papaye-labs.fr/. Le tutoriel Scoubi Club est intégré à `/
 
 La page charge seulement les projets sélectionnés par le propriétaire depuis le service déclaré dans `catalog.config.json`. Aucun inventaire GitHub n’est envoyé à un visiteur anonyme. La sélection est stockée côté serveur ; `projects.json` conserve les deux fiches publiques de référence mais n’est plus injecté comme catalogue de secours.
 
-Dans **Espace privé**, la connexion GitHub du propriétaire donne accès aux projets, à la synchronisation GitHub et aux boutons **Afficher publiquement / Retirer du public**. Les nouveaux projets sont privés par défaut. On peut ajouter un lien et modifier son nom, son adresse et sa description. Les dépôts sans site restent accessibles depuis cette vue par leur lien GitHub.
+Dans **Espace privé**, un compte Papaye indépendant (identifiant et mot de passe) donne accès aux projets et aux boutons **Afficher publiquement / Retirer du public**, sans connexion GitHub ni ChatGPT. Les dépôts publics GitHub sont repérés sans jeton à l’ouverture de l’espace connecté ou avec **Actualiser les projets** ; les nouveaux projets restent privés par défaut. Les liens des autres projets s’ajoutent manuellement. On peut modifier leur nom, leur adresse et leur description. Les dépôts sans site restent accessibles depuis cette vue par leur lien GitHub. La connexion peut être conservée 30 jours sur un appareil choisi.
 
 La connexion ne change pas les droits des applications lancées. Un lien privé ne rend pas son application publique. Scoubi Club est la copie autonome expressément demandée ; l’ancienne version Sites reste inchangée.
 
