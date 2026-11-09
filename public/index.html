@@ -29,6 +29,7 @@
       <section id="applications" class="applications" aria-labelledby="apps-title">
         <div class="section-heading"><h2 id="apps-title">Applications <span class="count"><!--PROJECT_COUNT--></span></h2><span class="section-hint">Accès direct</span></div>
         <div class="project-list"><!--PROJECTS--></div>
+        <div class="catalog-controls" hidden><p id="catalog-status" role="status" aria-live="polite"></p><button id="catalog-refresh" type="button">Actualiser <span aria-hidden="true">↻</span></button></div>
       </section>
       <section id="ressources" class="resources" aria-labelledby="resources-title">
         <div class="section-heading"><h2 id="resources-title">Ressources</h2></div>
@@ -40,5 +41,7 @@
     </main>
     <footer><span>Papaye Labs</span><span>Les outils. Tout de suite.</span></footer>
   </div>
+  <script type="application/json" id="catalog-data"><!--CATALOG_DATA--></script>
+  <script type="module" src="/catalog-ui.mjs"></script>
 </body>
 </html>

@@ -9,5 +9,16 @@
     "url": "https://memoquest.papaye-labs.fr/",
     "source": "https://github.com/Cthulhu59138/memoquest",
     "tags": ["4 parcours", "160 cartes", "Sans compte"]
+  },
+  {
+    "id": "scoubi-club",
+    "name": "Scoubi Club",
+    "category": "CRÉER · APPRENDRE",
+    "description": "Réalisez un scoubidou pas à pas, avec des gestes animés, des couleurs au choix et une reprise de votre progression.",
+    "shortName": "SC",
+    "status": "Accès privé",
+    "url": "https://atelier-scoubidou-malo.popiplette.chatgpt.site",
+    "ctaLabel": "Ouvrir le tutoriel",
+    "tags": ["Tutoriel animé", "Étape par étape", "Connexion ChatGPT"]
   }
 ]
