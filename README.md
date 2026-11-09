@@ -23,3 +23,38 @@ Le domaine canonique est papaye-labs.fr. Conserver le TXT de vérification de pr
 ## Scoubi Club
 
 Textes, dessins SVG et animations propres au projet. Maillage rond à quatre brins, méthode séquentielle inspirée de [la méthode du carton](https://lartdesscoubidous.com/techniques-de-base/technique-du-carton-4-fils/) et du [maillage rond](https://lartdesscoubidous.com/techniques-de-base/maillage-rond-4fils/). Le coin des grands explique les limites des schémas. Accompagnement adulte pour les nœuds et les ciseaux ; voix facultative selon l’appareil.
+
+## Malomatix — bêta web jouable
+
+`/malomatix/` est une application web statique : huit mini-jeux adaptés des
+règles Android J8, jouables au clavier et au toucher. Aucun APK ni installation
+n'est nécessaire. La fiche de référence est conservée dans `projects.json` ;
+son affichage sur l'accueil se règle dans la sélection publique du service.
+
+- Comparer (plus, moins, autant), Flash, Calcul (addition ou soustraction),
+  Suites, Puzzles, Fabrique des dizaines, Petit marché et Robot jardinier.
+- Cinq manches par partie, aide facultative, correction et carnet de souvenirs.
+- Deux profils anonymes, trois ambiances et reprise des parties locales.
+- Aucun compte, publicité, outil de suivi ou appel à une API dans le jeu.
+
+Les données restent dans `localStorage`, clé `papaye.malomatix.web.v1`.
+Le schéma est validé à la lecture ; un stockage indisponible est signalé.
+Les sauvegardes web et Android sont distinctes. Le code parent et les variantes
+Android avancées ne sont pas reproduits : le profil adulte web est accessible
+librement. Une connexion est nécessaire au chargement ; pas de garantie hors ligne.
+Cette bêta web 0.1 n'est pas une conversion binaire de l'APK.
+
+`engine.mjs` porte la génération et les transitions pures ; `storage.mjs` valide
+et sauvegarde les profils ; `views.mjs` et `art.mjs` rendent l'interface et les
+illustrations SVG ; `app.mjs` orchestre les interactions, focus et animations.
+Flash est interrompu proprement si l'onglet devient invisible. Les animations
+Robot ne décident pas du résultat et respectent la préférence de mouvement réduit.
+
+`npm run check` inclut 800 sessions générées des huit jeux, les échanges de
+quantités, les paiements alternatifs, collisions/chemins du robot, rechargement,
+récompense unique et rejet d'états invalides, en plus des tests du catalogue.
+Les essais sur émulateur Android ne remplacent pas les contrôles de cette version web.
+
+Le code JavaScript web de ce dépôt est public ; le projet Android reste distinct.
+La publication APK initialement envisagée a été remplacée par le jeu en ligne
+à la demande d'Adrien le 9 novembre 2026. Les liens APK ne sont pas affichés.

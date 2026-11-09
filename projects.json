@@ -8,7 +8,11 @@
     "status": "Application web",
     "url": "https://memoquest.papaye-labs.fr/",
     "source": "https://github.com/Cthulhu59138/memoquest",
-    "tags": ["4 parcours", "160 cartes", "Sans compte"]
+    "tags": [
+      "4 parcours",
+      "160 cartes",
+      "Sans compte"
+    ]
   },
   {
     "id": "scoubi-club",
@@ -19,6 +23,25 @@
     "status": "Sans compte",
     "url": "https://papaye-labs.fr/scoubi/",
     "ctaLabel": "Ouvrir le tutoriel",
-    "tags": ["Tutoriel animé", "Étape par étape", "Sans compte"]
+    "tags": [
+      "Tutoriel animé",
+      "Étape par étape",
+      "Sans compte"
+    ]
+  },
+  {
+    "id": "malomatix",
+    "name": "Malomatix",
+    "category": "JOUER · EXPLORER · COMPTER",
+    "description": "Huit jeux de nombres, de logique et de formes à explorer directement dans le navigateur, pour les enfants et les plus grands.",
+    "shortName": "MA",
+    "status": "Bêta web",
+    "url": "https://papaye-labs.fr/malomatix/",
+    "ctaLabel": "Jouer en ligne",
+    "tags": [
+      "8 mini-jeux",
+      "Sans installation",
+      "Sans compte"
+    ]
   }
 ]
