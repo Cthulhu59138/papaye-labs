@@ -3,6 +3,9 @@
 Accueil public des projets Papaye Labs, prévu sur https://papaye-labs.fr/.
 HTML et CSS statiques, sans dépendance à installer ni données utilisateur.
 
+L’accueil est un tableau de lancement compact : applications et boutons d’accès
+direct avant les ressources techniques. Le catalogue reste utilisable sans JavaScript.
+
 ## Construire
 
 Avec Node.js 22 :
@@ -21,6 +24,12 @@ adresse HTTPS, dépôt source et étiquettes. Puis exécuter `npm run check`.
 Le catalogue est inséré dans le HTML pendant la compilation ; aucun JavaScript
 n’est requis dans le navigateur. Seuls les projets prêts et destinés au public
 doivent être ajoutés à ce catalogue.
+
+Champs facultatifs : `shortName` (1 à 3 caractères pour l’icône), `status`
+(plateforme ou stade de diffusion) et `ctaLabel` (action du bouton).
+`source` peut être omis si le code d’une application n’est pas public.
+Le nombre d’applications est calculé à la compilation. Les grandes illustrations
+et textes de présentation ne font pas partie de l’accueil opérationnel.
 
 ## Déployer
 

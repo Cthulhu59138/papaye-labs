@@ -3,7 +3,9 @@
     "id": "memoquest",
     "name": "MémoQuest",
     "category": "APPRENDRE · MÉMORISER",
-    "description": "Quelques minutes. Des souvenirs pour longtemps. Des flashcards et des révisions au bon moment pour faire grandir ta mémoire.",
+    "description": "Révisez avec des flashcards et retrouvez les cartes à revoir grâce à la répétition espacée.",
+    "shortName": "MQ",
+    "status": "Application web",
     "url": "https://memoquest.papaye-labs.fr/",
     "source": "https://github.com/Cthulhu59138/memoquest",
     "tags": ["4 parcours", "160 cartes", "Sans compte"]

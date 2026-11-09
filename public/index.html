@@ -3,46 +3,42 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#fcf6e9">
-  <meta name="description" content="Papaye Labs : un petit laboratoire numérique pour explorer, apprendre et donner vie aux idées. Découvre MémoQuest et les projets à venir.">
-  <meta property="og:title" content="Papaye Labs — Cultiver les idées">
-  <meta property="og:description" content="Des expériences numériques pour apprendre et explorer. Première récolte : MémoQuest.">
+  <meta name="theme-color" content="#f4f5f0">
+  <meta name="description" content="Le tableau de lancement Papaye Labs. Ouvrez directement vos applications et retrouvez leurs ressources.">
+  <meta property="og:title" content="Papaye Labs — Tableau de lancement">
+  <meta property="og:description" content="Vos applications, accessibles en un clic.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://papaye-labs.fr/">
   <link rel="canonical" href="https://papaye-labs.fr/">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
-  <title>Papaye Labs — Cultiver les idées</title>
+  <title>Papaye Labs — Tableau de lancement</title>
 </head>
 <body>
-  <a class="skip-link" href="#projets">Aller aux projets</a>
+  <a class="skip-link" href="#applications">Aller aux applications</a>
+  <header class="site-header"><div class="header-inner">
+    <a class="wordmark" href="/" aria-label="Papaye Labs, accueil"><span class="brand-dot" aria-hidden="true"></span>papaye<span class="labs">labs</span><span class="wordmark-period">.</span></a>
+    <nav aria-label="Navigation principale"><a class="nav-active" href="#applications">Applications</a><a href="#ressources">Ressources</a></nav>
+  </div></header>
   <div class="site-shell">
-    <header class="site-header">
-      <a class="wordmark" href="/" aria-label="Papaye Labs, accueil"><span class="brand-dot" aria-hidden="true"></span>papaye<span class="labs">labs</span><span class="wordmark-period">.</span></a>
-      <nav aria-label="Navigation principale"><a href="#projets">Les projets <span aria-hidden="true">↗</span></a><a href="https://github.com/Cthulhu59138/papaye-labs" class="source-link">Sur GitHub <span aria-hidden="true">↗</span></a></nav>
-    </header>
     <main>
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <p class="eyebrow"><span></span> UN PETIT LABORATOIRE NUMÉRIQUE</p>
-          <h1 id="hero-title">Cultiver<br>les <em>idées.</em></h1>
-          <p class="hero-description">Un peu de curiosité, beaucoup d’envie d’essayer.<br> Des projets qui prennent vie, une expérience à la fois.</p>
-          <a class="pill-button" href="#projets">Découvrir les projets <span aria-hidden="true">↘</span></a>
-        </div>
-        <div class="hero-art" aria-hidden="true">
-          <span class="orbit orbit-one"></span><span class="orbit orbit-two"></span>
-          <span class="art-note">EN TRAIN DE POUSSER</span>
-          <div class="papaya"><div class="papaya-heart"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
-          <span class="art-spark">✳</span><span class="art-caption">De la graine à l’idée.</span>
+      <section class="board-heading" aria-labelledby="board-title">
+        <div><p class="eyebrow">VOTRE POINT DE DÉPART</p><h1 id="board-title">Tableau de lancement<span class="title-dot">.</span></h1><p class="board-description">Choisissez un outil. Passez à l’action.</p></div>
+        <span class="board-label"><span class="grid-icon" aria-hidden="true">▦</span> Papaye Labs</span>
+      </section>
+      <section id="applications" class="applications" aria-labelledby="apps-title">
+        <div class="section-heading"><h2 id="apps-title">Applications <span class="count"><!--PROJECT_COUNT--></span></h2><span class="section-hint">Accès direct</span></div>
+        <div class="project-list"><!--PROJECTS--></div>
+      </section>
+      <section id="ressources" class="resources" aria-labelledby="resources-title">
+        <div class="section-heading"><h2 id="resources-title">Ressources</h2></div>
+        <div class="resource-grid">
+          <a class="resource-link" href="https://github.com/Cthulhu59138/papaye-labs"><span class="resource-icon" aria-hidden="true">&lt;/&gt;</span><span><strong>Code de l’accueil</strong><small>Consulter le dépôt GitHub</small></span><span class="link-arrow" aria-hidden="true">↗</span></a>
+          <a class="resource-link" href="https://github.com/Cthulhu59138/papaye-labs/commits/main/"><span class="resource-icon" aria-hidden="true">↺</span><span><strong>Dernières modifications</strong><small>Consulter l’historique du site</small></span><span class="link-arrow" aria-hidden="true">↗</span></a>
         </div>
       </section>
-      <section class="projects" id="projets" aria-labelledby="projects-title">
-        <div class="section-heading"><div><p class="eyebrow">LA PREMIÈRE RÉCOLTE</p><h2 id="projects-title">À explorer.</h2></div><p>Des outils à ouvrir.<br>Des idées à faire grandir.</p></div>
-        <!--PROJECTS-->
-      </section>
-      <section class="closing-note" aria-label="À propos du laboratoire"><span aria-hidden="true">✳</span><p>Le labo continue de grandir.<br><strong>La suite se cultive ici.</strong></p><a href="https://github.com/Cthulhu59138/papaye-labs">Voir les coulisses <span aria-hidden="true">↗</span></a></section>
     </main>
-    <footer><span>Papaye Labs · Un terrain de curiosité.</span><span>Fait pour être exploré. <span aria-hidden="true">☀</span></span></footer>
+    <footer><span>Papaye Labs</span><span>Les outils. Tout de suite.</span></footer>
   </div>
 </body>
 </html>
