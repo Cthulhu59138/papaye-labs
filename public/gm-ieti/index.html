@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Le Grand Méchant IETI : un peu bougon, beaucoup de méthode. Un atelier pour cadrer une indication avant de se précipiter.">
+  <meta name="robots" content="noindex,nofollow">
+  <title>GM-IETI · Des faits, pas du flou.</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./config.js" defer></script><script src="./app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#atelier">Aller au cadrage</a>
+<header class="site-header">
+  <a class="brand" href="https://papaye-labs.fr/" aria-label="Accueil Papaye Labs"><span class="brand-mark">p.</span> PAPAYE <b>LABS</b></a>
+  <span class="header-note">L’ATELIER DES IDÉES QUI PRENNENT VIE</span>
+  <span class="version"><span></span> PROTOTYPE 01</span>
+</header>
+<main>
+  <section class="intro" aria-labelledby="title">
+    <div class="intro-copy">
+      <p class="eyebrow">GRAND MÉCHANT IETI / ASSISTANT DE CADRAGE</p>
+      <h1 id="title">Un défaut ?<br>On va <em>se cadrer.</em></h1>
+      <p class="intro-text">Un peu brut. Franchement bougon. Toujours méthodique.<br>Pose les faits sur la table, on remet le problème dans l’ordre.</p>
+      <div class="intro-actions"><a class="button primary" href="#atelier">Cadrer mon indication <span aria-hidden="true">↗</span></a><button class="button secondary" id="voice-open">Et avec la voix ? <span aria-hidden="true">♫</span></button></div>
+      <p class="prototype-note">Aperçu guidé à l’écrit · Réponses préparées · Voix en préparation</p>
+    </div>
+    <div class="mascot-card">
+      <span class="mascot-label">LE GM-IETI</span><span class="sticker">BOUGON,<br>MAIS UTILE.</span>
+      <svg class="mascot" viewBox="0 0 380 300" role="img" aria-label="Un yéti bleu au casque orange, les sourcils froncés et une fiche sous le bras">
+        <ellipse cx="195" cy="278" rx="131" ry="13" fill="#314844" opacity=".12"/>
+        <path d="M91 277 83 225 61 239 49 216 67 207 59 195 84 177 89 118 107 108 110 76 135 81 150 62 173 75 195 62 215 78 244 70 250 98 270 109 278 164 296 181 288 199 309 218 298 240 277 231 279 278Z" fill="#a8d1cb" stroke="#233d3a" stroke-width="5" stroke-linejoin="round"/>
+        <path d="m111 260 7-77 21-12 97 1 23 20 1 68" fill="#d9ebe5"/>
+        <path d="m122 126 16-19 29 10 25-9 25 9 29-7 14 17-2 44-16 27-47 13-47-17-21-27Z" fill="#eaf2df"/>
+        <path d="m131 127 39 10m39 0 35-12" stroke="#233d3a" stroke-width="10" stroke-linecap="round"/>
+        <ellipse cx="156" cy="147" rx="5" ry="7" fill="#233d3a"/><ellipse cx="225" cy="147" rx="5" ry="7" fill="#233d3a"/>
+        <path d="m181 151 10-4 11 4-11 12Z" fill="#5a8c85"/><path d="m170 181 39-4" stroke="#233d3a" stroke-width="5" stroke-linecap="round"/>
+        <path d="m125 96 2-20c0-35 28-50 63-50s64 22 64 57v13" fill="#f58443" stroke="#233d3a" stroke-width="5"/>
+        <path d="M184 28v50m21-48v48" stroke="#bd542e" stroke-width="5"/><rect x="111" y="87" width="157" height="18" rx="7" fill="#f58443" stroke="#233d3a" stroke-width="5"/>
+        <g transform="rotate(-12 268 220)"><rect x="231" y="180" width="75" height="94" rx="5" fill="#f6e8b5" stroke="#233d3a" stroke-width="5"/><rect x="252" y="175" width="32" height="12" rx="3" fill="#233d3a"/><path d="m246 204 6 6 12-12m-18 28 6 6 12-12m8-13h19m-19 22h19m-45 20h45" fill="none" stroke="#6e8471" stroke-width="3"/></g>
+        <path d="m278 213-15 2-4 12 11 9 18-5" fill="#a8d1cb" stroke="#233d3a" stroke-width="5" stroke-linecap="round"/>
+        <path d="m100 274 38 1m70 0 29-1" stroke="#233d3a" stroke-width="5" stroke-linecap="round"/>
+      </svg>
+      <p>« “Ça a l’air bizarre”,<br>c’est un début. <b>Pas un dossier.</b> »</p>
+    </div>
+  </section>
+  <section class="workspace" id="atelier" aria-labelledby="work-title">
+    <div class="workspace-head"><div><span class="eyebrow">LE BUREAU DU GM</span><h2 id="work-title">Des faits, pas du flou.</h2></div><button class="text-button" id="example">Essayer un cas fictif ↗</button></div>
+    <div class="work-grid">
+      <nav class="steps-panel" aria-label="Étapes du cadrage"><p class="panel-label">ON REPREND DANS L’ORDRE</p><ol id="steps"></ol><div class="progress-track"><span id="progress-bar"></span></div><p id="progress-text">0 / 6 rubriques renseignées</p><p class="small-note">Renseigné ≠ vérifié.<br>Le GM sait aussi dire « à préciser ».</p></nav>
+      <div class="conversation-panel">
+        <div class="conversation-top"><span class="avatar-mini" aria-hidden="true">G.</span><div><b>Le Grand Méchant IETI</b><small>Il grogne. Tu avances.</small></div><span class="mode-badge">PARCOURS GUIDÉ</span></div>
+        <div class="question-wrap" aria-live="polite" aria-atomic="true"><p class="question-count" id="question-count"></p><h3 id="question-title"></h3><p id="question-text"></p></div>
+        <form id="answer-form"><label for="answer" id="answer-label">Les faits, même incomplets</label><textarea id="answer" rows="4" maxlength="4000" placeholder="Décris ce que tu sais…"></textarea><p class="field-note">Sans nom de client ni donnée sensible. Le brouillon reste dans cet onglet.</p><div class="form-actions"><button type="button" class="text-button" id="unknown">À préciser plus tard</button><button type="submit" class="button primary" id="next">On avance <span aria-hidden="true">→</span></button></div></form>
+        <div id="finished" hidden><p class="finish-stamp">CADRAGE PRÉPARÉ</p><h3>Voilà. Là, on peut discuter.</h3><p>Tu as une base à compléter et à faire vérifier. Les rubriques restent modifiables à gauche.</p><button class="button primary" id="export-finished">Télécharger ma fiche ↓</button></div>
+        <p class="local-status" id="local-status" role="status"></p>
+      </div>
+      <aside class="summary-panel" aria-labelledby="summary-title"><div class="summary-heading"><span class="eyebrow">LE DOSSIER PREND FORME</span><h3 id="summary-title">Ta fiche de cadrage</h3></div><dl id="summary"></dl><div class="orientation"><b>FSI / DTE</b><p id="orientation-text">Orientation à instruire avec les critères métier et les éléments de preuve.</p></div><button class="button export-button" id="export">Télécharger la fiche ↓</button><button class="text-button reset" id="reset">Repartir de zéro</button></aside>
+    </div>
+  </section>
+  <section class="principles" aria-label="La méthode"><div><span>01 / LE CONSTAT</span><h3>Une indication n’est pas encore un défaut.</h3><p>On précise ce qui a été vu, où, comment et avec quelle preuve.</p></div><div><span>02 / LES CRITÈRES</span><h3>Le seuil avant le formulaire.</h3><p>Base de travail : FSI au-delà du seuil de caractérisation ; DTE si le défaut est réel, non parasite. Règles détaillées à compléter.</p></div><div><span>03 / LE BON SENS</span><h3>Le planning n’est pas un critère d’acceptation.</h3><p>On clarifie les contraintes et les interlocuteurs. L’humour ne décide pas de la conformité.</p></div></section>
+</main>
+<footer><span>GM-IETI <b>×</b> PAPAYE LABS</span><p>Une grosse voix. Une méthode claire. Et quelques grognements.</p><span>V0.1 · ATELIER EN CONSTRUCTION</span></footer>
+<dialog id="voice-dialog"><button class="dialog-close" aria-label="Fermer" id="voice-close">×</button><p class="eyebrow">IL LUI MANQUE ENCORE SA VOIX</p><h2>Bientôt, il va<br>vraiment râler.</h2><p id="voice-detail">Le parcours écrit est prêt à essayer. La conversation avec la voix clonée sera disponible une fois l’agent ElevenLabs configuré.</p><div id="voice-widget"></div><p class="field-note" id="voice-privacy">Le mode vocal transmettra ta voix et tes messages à ElevenLabs. L’aperçu écrit, lui, reste dans cet onglet.</p><button class="button primary" id="voice-confirm">Revenir au cadrage</button></dialog>
+<dialog id="reset-dialog"><h2>On repart de zéro ?</h2><p>Le brouillon actuel sera effacé. Télécharge ta fiche si tu veux la garder.</p><div class="form-actions"><button class="button secondary" id="reset-cancel">Garder ma fiche</button><button class="button primary" id="reset-confirm">Effacer le brouillon</button></div></dialog>
+<noscript><p class="noscript">Active JavaScript pour utiliser le parcours de cadrage.</p></noscript>
+</body>
+</html>
