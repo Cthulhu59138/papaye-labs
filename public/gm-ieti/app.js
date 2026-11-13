@@ -21,8 +21,21 @@
   let current = 0;
   let fictitious = false;
   let widgetLoaded = false;
+  let widgetLoading = false;
   const $ = (id) => document.getElementById(id);
   const status = (text) => { $("local-status").textContent = text; };
+  const agentId = window.GM_IETI_CONFIG?.agentId;
+  const voiceConfigured = typeof agentId === "string" && /^agent_[a-zA-Z0-9_-]+$/.test(agentId);
+  const voiceStatus = (text) => { $("voice-feedback").textContent = text; };
+  if (voiceConfigured) {
+    $("voice-open").textContent = "Parler au GM-IETI ♫";
+    $("version-label").textContent = "BÊTA VOCALE 02";
+    $("voice-state").textContent = "Conversation IA en français · Voix synthétique d’Adrien";
+    $("voice-eyebrow").textContent = "LE GM A TROUVÉ SA VOIX";
+    $("voice-title").textContent = "Bon. On t’écoute.";
+    $("voice-detail").textContent = "Lance la conversation, autorise ton micro et décris ton indication. Tu peux interrompre le GM et lui demander une synthèse. La voix est une reproduction synthétique autorisée.";
+    $("voice-confirm").textContent = "Ouvrir la conversation";
+  }
   function storeCurrent() {
     if (current < fields.length) answers[current] = $("answer").value.trim();
   }
@@ -104,27 +117,40 @@
   $("export").addEventListener("click", exportFile); $("export-finished").addEventListener("click", exportFile);
   $("voice-open").addEventListener("click", () => {
     $("voice-dialog").showModal();
-    const id = window.GM_IETI_CONFIG?.agentId;
-    if (id && /^agent_[a-zA-Z0-9_-]+$/.test(id)) {
-      $("voice-detail").textContent = "La conversation vocale s’ouvre dans le module ElevenLabs. Ta fiche écrite et la conversation vocale sont indépendantes dans cette première version.";
-      $("voice-confirm").textContent = "Ouvrir la conversation vocale";
-    }
   });
-  $("voice-confirm").addEventListener("click", () => {
-    const id = window.GM_IETI_CONFIG?.agentId;
-    if (!id || !/^agent_[a-zA-Z0-9_-]+$/.test(id)) { $("voice-dialog").close(); $("atelier").scrollIntoView({ behavior: "smooth" }); return; }
+  $("voice-confirm").addEventListener("click", async () => {
+    if (!voiceConfigured) { $("voice-dialog").close(); $("atelier").scrollIntoView({ behavior: "smooth" }); return; }
+    $("voice-dialog").close();
+    if (widgetLoading) return;
     // Load the provider only after the visitor explicitly opens voice mode.
     if (!widgetLoaded) {
-      const widget = document.createElement("elevenlabs-convai"); widget.setAttribute("agent-id", id);
+      widgetLoading = true;
+      voiceStatus("Chargement de la conversation…");
+      const widget = document.createElement("elevenlabs-convai"); widget.setAttribute("agent-id", agentId);
+      widget.setAttribute("variant", "expanded");
       widget.setAttribute("action-text", "Parler au GM-IETI"); widget.setAttribute("start-call-text", "Commencer");
       widget.setAttribute("end-call-text", "Terminer"); widget.setAttribute("listening-text", "Le GM écoute…");
       widget.setAttribute("speaking-text", "Le GM te répond…"); widget.setAttribute("expand-text", "Ouvrir la conversation");
       document.body.append(widget);
       const script = document.createElement("script"); script.src = "https://unpkg.com/@elevenlabs/convai-widget-embed"; script.async = true;
-      script.onerror = () => { widget.remove(); script.remove(); widgetLoaded = false; status("Le module vocal n’a pas pu être chargé. Réessaie depuis « Et avec la voix ? »."); };
-      document.body.append(script); widgetLoaded = true;
+      let timeout;
+      try {
+        await Promise.race([
+          new Promise((resolve, reject) => {
+            script.onerror = () => reject(new Error("Module inaccessible"));
+            customElements.whenDefined("elevenlabs-convai").then(resolve);
+            document.body.append(script);
+          }),
+          new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error("Délai dépassé")), 15000); })
+        ]);
+        widgetLoaded = true;
+      } catch {
+        widget.remove(); script.remove();
+        voiceStatus("La conversation n’a pas pu se charger. Vérifie ta connexion et réessaie avec « Parler au GM-IETI ».");
+        return;
+      } finally { clearTimeout(timeout); widgetLoading = false; }
     }
-    $("voice-dialog").close(); status("Le module vocal est ouvert. Utilise son bouton pour démarrer la conversation.");
+    voiceStatus("Le module est prêt en bas de l’écran. Utilise son bouton pour démarrer ou reprendre la conversation.");
   });
   $("voice-close").addEventListener("click", () => $("voice-dialog").close());
   window.addEventListener("beforeunload", (e) => { if (answers.some(Boolean)) { e.preventDefault(); e.returnValue = ""; } });
