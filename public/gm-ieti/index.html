@@ -13,7 +13,7 @@
 <header class="site-header">
   <a class="brand" href="https://papaye-labs.fr/" aria-label="Accueil Papaye Labs"><span class="brand-mark">p.</span> PAPAYE <b>LABS</b></a>
   <span class="header-note">L’ATELIER DES IDÉES QUI PRENNENT VIE</span>
-  <span class="version"><span></span> PROTOTYPE 01</span>
+  <span class="version"><span></span> <b id="version-label">PROTOTYPE 01</b></span>
 </header>
 <main>
   <section class="intro" aria-labelledby="title">
@@ -21,8 +21,9 @@
       <p class="eyebrow">GRAND MÉCHANT IETI / ASSISTANT DE CADRAGE</p>
       <h1 id="title">Un défaut ?<br>On va <em>se cadrer.</em></h1>
       <p class="intro-text">Un peu brut. Franchement bougon. Toujours méthodique.<br>Pose les faits sur la table, on remet le problème dans l’ordre.</p>
-      <div class="intro-actions"><a class="button primary" href="#atelier">Cadrer mon indication <span aria-hidden="true">↗</span></a><button class="button secondary" id="voice-open">Et avec la voix ? <span aria-hidden="true">♫</span></button></div>
-      <p class="prototype-note">Aperçu guidé à l’écrit · Réponses préparées · Voix en préparation</p>
+      <div class="intro-actions"><button class="button primary" id="voice-open">Et avec la voix ? <span aria-hidden="true">♫</span></button><a class="button secondary" href="#atelier">Préparer une fiche <span aria-hidden="true">↗</span></a></div>
+      <p class="prototype-note" id="voice-state">Aperçu guidé à l’écrit · Réponses préparées · Voix en préparation</p>
+      <p class="field-note" id="voice-feedback" role="status" aria-live="polite"></p>
     </div>
     <div class="mascot-card">
       <span class="mascot-label">LE GM-IETI</span><span class="sticker">BOUGON,<br>MAIS UTILE.</span>
@@ -59,8 +60,8 @@
   </section>
   <section class="principles" aria-label="La méthode"><div><span>01 / LE CONSTAT</span><h3>Une indication n’est pas encore un défaut.</h3><p>On précise ce qui a été vu, où, comment et avec quelle preuve.</p></div><div><span>02 / LES CRITÈRES</span><h3>Le seuil avant le formulaire.</h3><p>Base de travail : FSI au-delà du seuil de caractérisation ; DTE si le défaut est réel, non parasite. Règles détaillées à compléter.</p></div><div><span>03 / LE BON SENS</span><h3>Le planning n’est pas un critère d’acceptation.</h3><p>On clarifie les contraintes et les interlocuteurs. L’humour ne décide pas de la conformité.</p></div></section>
 </main>
-<footer><span>GM-IETI <b>×</b> PAPAYE LABS</span><p>Une grosse voix. Une méthode claire. Et quelques grognements.</p><span>V0.1 · ATELIER EN CONSTRUCTION</span></footer>
-<dialog id="voice-dialog"><button class="dialog-close" aria-label="Fermer" id="voice-close">×</button><p class="eyebrow">IL LUI MANQUE ENCORE SA VOIX</p><h2>Bientôt, il va<br>vraiment râler.</h2><p id="voice-detail">Le parcours écrit est prêt à essayer. La conversation avec la voix clonée sera disponible une fois l’agent ElevenLabs configuré.</p><div id="voice-widget"></div><p class="field-note" id="voice-privacy">Le mode vocal transmettra ta voix et tes messages à ElevenLabs. L’aperçu écrit, lui, reste dans cet onglet.</p><button class="button primary" id="voice-confirm">Revenir au cadrage</button></dialog>
+<footer><span>GM-IETI <b>×</b> PAPAYE LABS</span><p>Une grosse voix. Une méthode claire. Et quelques grognements.</p><span>V0.2 · RÈGLES MÉTIER À AFFINER</span></footer>
+<dialog id="voice-dialog"><button class="dialog-close" aria-label="Fermer" id="voice-close">×</button><p class="eyebrow" id="voice-eyebrow">IL LUI MANQUE ENCORE SA VOIX</p><h2 id="voice-title">Bientôt, il va<br>vraiment râler.</h2><p id="voice-detail">Le parcours écrit est prêt à essayer. La conversation avec la voix clonée sera disponible une fois l’agent ElevenLabs configuré.</p><p class="field-note" id="voice-privacy">Le mode vocal transmet ta voix et tes messages à ElevenLabs. Utilise un cas fictif ou anonymisé. La fiche écrite reste dans cet onglet et se complète séparément.</p><button class="button primary" id="voice-confirm">Revenir au cadrage</button></dialog>
 <dialog id="reset-dialog"><h2>On repart de zéro ?</h2><p>Le brouillon actuel sera effacé. Télécharge ta fiche si tu veux la garder.</p><div class="form-actions"><button class="button secondary" id="reset-cancel">Garder ma fiche</button><button class="button primary" id="reset-confirm">Effacer le brouillon</button></div></dialog>
 <noscript><p class="noscript">Active JavaScript pour utiliser le parcours de cadrage.</p></noscript>
 </body>
