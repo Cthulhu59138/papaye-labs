@@ -2,16 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createConfirmation} from '../public/dashboard-confirm.mjs';
 
-function fixture() {
-  const handlers={},nodes=new Map();let focusReturns=0;
+function fixture({deferClose=false}={}) {
+  const handlers={},nodes=new Map(),closeEvents=[];let focusReturns=0;
   const dialog={open:false,ownerDocument:{activeElement:{isConnected:true,focus(){focusReturns++;}}},
     addEventListener(name,handler){handlers[name]=handler;},
     querySelector(selector){if(!nodes.has(selector))nodes.set(selector,{textContent:'',classList:{add(){}},focus(){this.focused=true;}});return nodes.get(selector);},
-    showModal(){this.open=true;},close(){this.open=false;handlers.close?.();},replaceChildren(){nodes.clear();this.innerHTML='';},
+    showModal(){this.open=true;},close(){this.open=false;if(deferClose)closeEvents.push(()=>handlers.close?.());else handlers.close?.();},replaceChildren(){nodes.clear();this.innerHTML='';},
   };
   const controls=createConfirmation(dialog);
   const choose=value=>handlers.click({target:{closest:()=>({dataset:{confirmation:value}})}});
-  return {dialog,controls,handlers,nodes,choose,get focusReturns(){return focusReturns;}};
+  return {dialog,controls,handlers,nodes,choose,deliverClose(){closeEvents.shift()?.();},get focusReturns(){return focusReturns;}};
 }
 test('la confirmation attend une action explicite et rend le focus au déclencheur',async()=>{
   const f=fixture();let resolved=false;
@@ -35,4 +35,16 @@ test('une nouvelle confirmation ne réutilise pas une ancienne décision',async(
   const second=f.controls.request({title:'Seconde',message:'Autre action'});
   assert.equal(await first,false);assert.equal(f.dialog.open,true);
   f.choose('cancel');assert.equal(await second,false);
+});
+test('un ancien événement close différé ne peut pas annuler la confirmation suivante',async()=>{
+  const f=fixture({deferClose:true});
+  const first=f.controls.request({title:'Première',message:'Une action'});
+  let secondResolved=false;
+  const second=f.controls.request({title:'Seconde',message:'Autre action'}).then(value=>{secondResolved=true;return value;});
+  assert.equal(await first,false);
+  f.deliverClose();await Promise.resolve();
+  assert.equal(secondResolved,false);assert.equal(f.dialog.open,true);
+  assert.equal(f.nodes.get('#confirmation-title').textContent,'Seconde');
+  f.choose('accept');assert.equal(await second,true);
+  f.deliverClose();assert.equal(f.dialog.open,false);
 });

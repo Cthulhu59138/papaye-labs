@@ -12,7 +12,9 @@ export function createConfirmation(dialog) {
     current.resolve(accepted);
   }
   dialog.addEventListener('cancel',event=>{event.preventDefault();finish(false);});
-  dialog.addEventListener('close',()=>finish(false));
+  // Native close events are queued: the previous dialog may already have been
+  // replaced by a new open confirmation when its close event is delivered.
+  dialog.addEventListener('close',()=>{if(!dialog.open)finish(false);});
   dialog.addEventListener('click',event=>{
     const button=event.target.closest('[data-confirmation]');
     if(button)finish(button.dataset.confirmation==='accept');

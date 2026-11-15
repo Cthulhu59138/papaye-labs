@@ -3,7 +3,7 @@
 ## Vérifié sur cette réalisation
 
 - Tests Node : authentification (activation, mot de passe, sessions, CSRF, origine, limites), validation des projets/tâches, conflits de révision et archivage ; migration SQLite, intégrité, persistance et restauration. Test HTTP réel exécuté hors bac à sable pour permettre l’écoute locale.
-- Tests frontend : 9 règles métier, 3 cas de gel de formulaire/snapshot et 4 cas de confirmation accessible. Les modules et le build passent ; `git diff --check` sans erreur.
+- Tests frontend : 9 règles métier, 3 cas de gel de formulaire/snapshot et 5 cas de confirmation accessible, dont un événement de fermeture ancien reçu après ouverture d’une nouvelle confirmation. Les modules et le build passent ; `git diff --check` sans erreur.
 - Tests CLI ajoutés après revue indépendante : restauration d’un WAL non checkpointé sans perte ; refus d’imports divergents sans écrasement. Ces défauts ont été corrigés avant installation.
 - Régressions Explorateurs et Malomatix vérifiées par les suites existantes. Les assets Explorateurs sont copiés depuis la livraison existante, sans données de joueur.
 - Import privé de préparation : 8 projets conservés après sauvegarde/restauration et contrôle d’intégrité. Aucun compte existant dans la source au contrôle initial ; aucun mot de passe utilisateur créé par l’agent.
