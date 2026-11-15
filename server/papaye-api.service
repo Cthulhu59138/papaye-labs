@@ -1,0 +1,32 @@
+[Unit]
+Description=Papaye Labs private dashboard API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=papaye-api
+Group=papaye-api
+WorkingDirectory=/opt/papaye-api/app
+ExecStart=/opt/papaye-api/node/bin/node /opt/papaye-api/app/http.mjs
+Environment=PAPAYE_CONFIG=/etc/papaye-api/config.json
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/papaye-api
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+LockPersonality=yes
+MemoryMax=256M
+CPUQuota=75%
+TasksMax=32
+
+[Install]
+WantedBy=multi-user.target

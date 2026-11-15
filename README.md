@@ -1,24 +1,22 @@
-# Papaye Labs — sélection publique
+# Papaye Labs — tableau de bord privé
 
-Accueil sur https://papaye-labs.fr/. Le tutoriel Scoubi Club est intégré à `/scoubi/`, sans compte ni connexion ChatGPT. Les animations, couleurs et sauvegardes de progression fonctionnent dans le navigateur. Les sauvegardes de l’ancienne adresse Sites ne sont pas transférées entre origines. La version publique emploie un texte générique, sans prénom personnel.
+https://papaye-labs.fr/ est l’entrée du tableau de bord personnel, avec un compte Papaye indépendant. Avant connexion, aucun catalogue, compteur, projet, tâche ou note n’est chargé. `/prive/` reste un alias de l’accueil.
 
-## Catalogue public et espace privé
+## Suivi et partage
 
-La page charge seulement les projets sélectionnés par le propriétaire depuis le service déclaré dans `catalog.config.json`. Aucun inventaire GitHub n’est envoyé à un visiteur anonyme. La sélection est stockée côté serveur ; `projects.json` conserve les deux fiches publiques de référence mais n’est plus injecté comme catalogue de secours.
+Vue d’ensemble, Projets et Tâches : recherche, statuts, échéances facultatives, notes privées, avancement calculé et archivage réversible. Les données résident dans SQLite sur l’ASUS ; aucune synchronisation de suivi avec Notion. Les synthèses d’intervention restent gérées séparément.
 
-Dans **Espace privé**, un compte Papaye indépendant (identifiant et mot de passe) donne accès aux projets et aux boutons **Afficher publiquement / Retirer du public**, sans connexion GitHub ni ChatGPT. Les dépôts publics GitHub sont repérés sans jeton à l’ouverture de l’espace connecté ou avec **Actualiser les projets** ; les nouveaux projets restent privés par défaut. Les liens des autres projets s’ajoutent manuellement. On peut modifier leur nom, leur adresse et leur description. Les dépôts sans site restent accessibles depuis cette vue par leur lien GitHub. La connexion peut être conservée 30 jours sur un appareil choisi.
+L’application d’un projet peut être ouverte séparément. Le bouton Copier le lien public n’est disponible que pour les adresses vérifiées sans compte : `/scoubi/`, `/malomatix/`, `/explorateurs/`. Une fiche de projet ou son archivage ne change jamais les permissions du site cible. Les autres applications conservent leurs protections.
 
-La connexion ne change pas les droits des applications lancées. Un lien privé ne rend pas son application publique. Scoubi Club est la copie autonome expressément demandée ; l’ancienne version Sites reste inchangée.
+Les Petits Explorateurs est une copie autonome de la livraison familiale, avec 40 cartes et 90 photographies locales créditées. Son ancien site privé reste distinct. Les progrès sont propres au navigateur et à l’origine ; utiliser l’export/import du jeu pour les transférer. Aucune sauvegarde personnelle n’est publiée.
 
-Le navigateur public ne garde pas de cache de projets : un retrait ne doit pas être annulé par une ancienne copie. Si le service est indisponible, la page affiche un message et propose de réessayer. Le service distingue l’API publique des routes authentifiées. Les sources du serveur et sa configuration de secrets sont gérées séparément du dépôt public.
+## Architecture et développement
 
-## Développement et publication
+Frontend statique sans dépendances, backend Node.js/SQLite isolé sur l’ASUS. `portal.config.json` contient seulement l’origine HTTPS de l’API, jamais un secret. Les réponses privées ne sont pas mises en cache ; l’interface est purgée après déconnexion ou expiration. Sessions de 12 heures par défaut, 30 jours si Rester connecté est choisi explicitement.
 
-Node.js 22, sans dépendance : `npm run check` exécute les tests et construit `dist/`. Aperçu : `python -m http.server 4191 --bind 127.0.0.1 --directory dist`.
+`npm run check` teste puis construit un `dist/` neuf. Le workflow GitHub Actions vérifie les PR et publie après mise à jour de main. `node scripts/preview.mjs` sert une recette locale isolée avec compte fictif. Ne pas le confondre avec le service de production.
 
-Le workflow GitHub Actions publie `dist/` après chaque push de main et vérifie les PR sans déployer. Avant publication, vérifier aussi l’API publique et les écrans public/privé ; le frontend dépend de la disponibilité de ce service. Retour arrière par `git revert`.
-
-Le domaine canonique est papaye-labs.fr. Conserver le TXT de vérification de propriété, les A/CNAME GitHub Pages et la messagerie. Le certificat du domaine fait l’objet d’un suivi distinct ; ne pas contourner les contrôles TLS.
+Le domaine canonique et les chemins des jeux existants sont conservés. Voir [contrat](docs/DASHBOARD-CONTRACT.md), [recette](docs/RECETTE-DASHBOARD.md) et [exploitation API](server/README.md). L’ancien catalogue public Sites est remplacé ; aucun inventaire ni secret ne doit être ajouté aux fichiers statiques.
 
 ## Scoubi Club
 

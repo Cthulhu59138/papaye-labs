@@ -3,46 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4f5f0">
-  <meta name="description" content="Le tableau de lancement Papaye Labs. Ouvrez directement vos applications et retrouvez leurs ressources.">
-  <meta property="og:title" content="Papaye Labs — Tableau de lancement">
-  <meta property="og:description" content="Vos applications, accessibles en un clic.">
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://papaye-labs.fr/">
+  <meta name="theme-color" content="#faf8f5">
+  <meta name="description" content="L’espace personnel Papaye Labs.">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
   <link rel="canonical" href="https://papaye-labs.fr/">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
-  <title>Papaye Labs — Tableau de lancement</title>
+  <title>Papaye Labs — Mon tableau de bord</title>
 </head>
 <body>
-  <a class="skip-link" href="#applications">Aller aux applications</a>
-  <header class="site-header"><div class="header-inner">
-    <a class="wordmark" href="/" aria-label="Papaye Labs, accueil"><span class="brand-dot" aria-hidden="true"></span>papaye<span class="labs">labs</span><span class="wordmark-period">.</span></a>
-    <nav aria-label="Navigation principale"><a class="nav-active" href="#applications">Applications</a><a href="https://papaye-projets.popiplette.chatgpt.site/prive">Espace privé ↗</a></nav>
-  </div></header>
-  <div class="site-shell">
-    <main>
-      <section class="board-heading" aria-labelledby="board-title">
-        <div><p class="eyebrow">LES PROJETS PAPAYE LABS</p><h1 id="board-title">Tableau de lancement<span class="title-dot">.</span></h1><p class="board-description">Une sélection d’outils à utiliser tout de suite.</p></div>
-        <span class="board-label"><span class="grid-icon" aria-hidden="true">▦</span> Papaye Labs</span>
-      </section>
-      <section id="applications" class="applications" aria-labelledby="apps-title">
-        <div class="section-heading"><h2 id="apps-title">Applications <span class="count"><!--PROJECT_COUNT--></span></h2><span class="section-hint">Accès direct</span></div>
-        <div class="project-list"><p class="catalog-empty">Chargement de la sélection…</p></div>
-        <noscript><p>Activez JavaScript pour consulter la sélection publique actualisée.</p></noscript>
-        <div class="catalog-controls" hidden><p id="catalog-status" role="status" aria-live="polite"></p><button id="catalog-refresh" type="button">Actualiser <span aria-hidden="true">↻</span></button></div>
-      </section>
-      <section id="ressources" class="resources" aria-labelledby="resources-title">
-        <div class="section-heading"><h2 id="resources-title">Ressources</h2></div>
-        <div class="resource-grid">
-          <a class="resource-link" href="https://github.com/Cthulhu59138/papaye-labs"><span class="resource-icon" aria-hidden="true">&lt;/&gt;</span><span><strong>Code de l’accueil</strong><small>Consulter le dépôt GitHub</small></span><span class="link-arrow" aria-hidden="true">↗</span></a>
-          <a class="resource-link" href="https://github.com/Cthulhu59138/papaye-labs/commits/main/"><span class="resource-icon" aria-hidden="true">↺</span><span><strong>Dernières modifications</strong><small>Consulter l’historique du site</small></span><span class="link-arrow" aria-hidden="true">↗</span></a>
-        </div>
-      </section>
-    </main>
-    <footer><span>Papaye Labs</span><span>Les outils. Tout de suite.</span></footer>
-  </div>
-  <script type="application/json" id="catalog-data"><!--CATALOG_DATA--></script>
-  <script type="module" src="/catalog-ui.mjs"></script>
+  <a class="skip-link" href="#main">Aller au contenu</a>
+  <div id="app"><main id="main" class="boot-screen" tabindex="-1"><div class="wordmark">papaye<span class="labs">labs</span><span class="brand-period">.</span></div><p role="status">Ouverture de ton espace…</p><noscript><p>JavaScript est nécessaire pour te connecter à ton espace privé.</p></noscript></main></div>
+  <dialog id="editor" aria-labelledby="dialog-title"></dialog>
+  <dialog id="confirmation" class="confirmation-dialog" aria-labelledby="confirmation-title" aria-describedby="confirmation-description"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="/dashboard.mjs"></script>
 </body>
 </html>
