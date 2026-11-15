@@ -14,7 +14,11 @@
 
 Service dédié `papaye-api`, données hors dépôt et hors GitHub Pages. L’API répond après redémarrage ; routes privées anonymes refusées (401), ancien catalogue anonyme absent (404). Une sauvegarde, une restauration dans un nouveau fichier et leur intégrité ont été contrôlées sur l’installation réelle.
 
-Au stade de cette note : activation Tailscale Funnel par le propriétaire et publication GitHub Pages encore en cours. Les contrôles de production seront ajoutés au bilan après résultat observé. L’application locale de recette ne démontre pas à elle seule la disponibilité du domaine public.
+Funnel activé par le propriétaire le 15 novembre 2026. Seul HTTPS 8443 est public et relaie l’API locale 5293 ; le Serve 443 reste privé. Vérifications HTTPS via le relais public Funnel : santé et état du compte à 200, projets anonymes refusés (401), ancien catalogue public absent (404), prévol CORS du domaine Papaye accepté (204), origine étrangère refusée (403). L’activation personnelle a été contrôlée à 200 sans créer le mot de passe utilisateur.
+
+PR 5 fusionnée : `983c95375b7706008594e1bc96ab848c1e7fbcb0`. [Déploiement GitHub Pages réussi](https://github.com/Cthulhu59138/papaye-labs/actions/runs/43733862856). Accueil privé publié sur https://papaye-labs.fr/ ; Scoubi Club, Malomatix et Les Petits Explorateurs accessibles sans compte. Images Explorateurs chargées, progression de départ vide. L’ancien portail Sites est réservé à son propriétaire, avec zéro visiteur externe et aucun groupe.
+
+Le navigateur habituel du propriétaire a confirmé que le tableau de bord joint l’API. Après transmission du lien personnel, l’API confirme le compte créé (`configured: true`, contrôle du 15 novembre à 18 h 15 UTC). Aucun identifiant ni mot de passe n’a été saisi par l’agent. Le navigateur intégré de recette a rencontré des délais sur les appels entre domaines, malgré des accès directs réussis : il n’a pas servi à valider le parcours authentifié de production. Les parcours complets de suivi sont validés sur la base locale de recette ; l’affichage du tableau réel reste à confirmer par le propriétaire.
 
 ## Reprise
 
