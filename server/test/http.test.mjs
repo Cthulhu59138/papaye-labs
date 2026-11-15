@@ -1,0 +1,30 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {createPortalServer} from '../http.mjs';
+import {database} from '../database.mjs';
+
+test('HTTP boundary enforces origin, preflight, bearer, CSRF, no-store and body size',async t=>{
+  const DB=database(':memory:'),origin='https://papaye-labs.fr';
+  const server=createPortalServer({DB,APP_ORIGIN:origin,SETUP_TOKEN_HASH:createHash('sha256').update('integration-test-activation').digest('base64url'),SETUP_EXPIRES:Math.floor(Date.now()/1000)+3600});
+  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
+  t.after(()=>new Promise(resolve=>server.close(()=>{DB.sql.close();resolve();})));
+  const base='http://127.0.0.1:'+server.address().port;
+  const request=(path,options={})=>fetch(base+path,options);
+  let r=await request('/api/tasks/task-id',{method:'OPTIONS',headers:{Origin:origin,'Access-Control-Request-Method':'DELETE','Access-Control-Request-Headers':'authorization,content-type,x-csrf-token'}});
+  assert.equal(r.status,204);assert.equal(r.headers.get('access-control-allow-origin'),origin);assert.equal(r.headers.get('access-control-allow-credentials'),null);assert.match(r.headers.get('access-control-allow-methods'),/DELETE/);
+  assert.equal((await request('/api/projects',{method:'OPTIONS',headers:{Origin:origin,'Access-Control-Request-Headers':'x-evil'}})).status,403);
+  assert.equal((await request('/api/me',{headers:{Origin:'https://evil.example'}})).status,403);
+  assert.equal((await request('/api/projects')).status,401);assert.equal((await request('/api/tasks')).status,401);
+  assert.equal((await request('/api/public/projects')).status,404);assert.equal((await request('/etc/passwd')).status,404);
+  assert.equal((await request('/api/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'x'.repeat(48001)})).status,413);
+  r=await request('/api/setup',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({token:'integration-test-activation',login:'adrien',password:'integration test phrase'})});
+  assert.equal(r.status,200);const identity=await r.json();assert.match(identity.sessionToken,/^[A-Za-z0-9_-]{43}$/);assert.equal(r.headers.get('set-cookie'),null);
+  const headers={Origin:origin,Authorization:'Bearer '+identity.sessionToken,'X-CSRF-Token':identity.csrf,'Content-Type':'application/json'};
+  r=await request('/api/projects',{headers});assert.equal(r.status,200);assert.equal(r.headers.get('access-control-allow-origin'),origin);assert.equal(r.headers.get('cache-control'),'no-store');assert.equal((await r.json()).projects.length,0);
+  r=await request('/api/projects',{method:'POST',headers,body:JSON.stringify({name:'HTTP project',notes:'🌱'.repeat(4000)})});assert.equal(r.status,201);const p=(await r.json()).project;
+  r=await request('/api/projects/'+p.id+'/tasks',{method:'POST',headers,body:JSON.stringify({title:'HTTP task'})});assert.equal(r.status,201);const task=(await r.json()).task;
+  r=await request('/api/tasks/'+task.id,{method:'DELETE',headers:{...headers,'X-CSRF-Token':'bad'},body:JSON.stringify({revision:1})});assert.equal(r.status,403);
+  r=await request('/api/tasks/'+task.id,{method:'DELETE',headers,body:JSON.stringify({revision:1})});assert.equal(r.status,200);
+  assert.equal((await request('/api/public/projects',{headers})).status,404);
+});

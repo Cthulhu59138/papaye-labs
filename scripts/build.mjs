@@ -1,10 +1,11 @@
-import {mkdir,cp,readFile,writeFile} from 'node:fs/promises';
-import {httpsUrl} from '../public/catalog.mjs';
-const config=JSON.parse(await readFile('catalog.config.json','utf8'));
-for(const key of ['endpoint','privateUrl'])if(!httpsUrl(config[key]))throw Error('Adresse de service invalide.');
-const template=await readFile('public/index.html','utf8');
-for(const marker of ['<!--PROJECT_COUNT-->','<!--CATALOG_DATA-->'])if(!template.includes(marker))throw Error('Emplacement absent : '+marker);
-await mkdir('dist',{recursive:true});await cp('public','dist',{recursive:true});
-await writeFile('dist/index.html',template.replace('<!--PROJECT_COUNT-->','—').replace('<!--CATALOG_DATA-->',()=>JSON.stringify(config).replace(/</g,'\\u003c')));
+import {mkdir,cp,readFile,writeFile,rm} from 'node:fs/promises';
+const config=JSON.parse(await readFile('portal.config.json','utf8'));
+const endpoint=new URL(config.apiBase);
+if(endpoint.protocol!=='https:'||endpoint.username||endpoint.password||endpoint.pathname!=='/'||endpoint.search||endpoint.hash)throw Error('L’API de production doit être une origine HTTPS.');
+// A clean build cannot retain an old catalogue or deployment artefact.
+await rm('dist',{recursive:true,force:true});
+await mkdir('dist',{recursive:true});
+await cp('public','dist',{recursive:true,filter:source=>!['catalog-ui.mjs','catalog.mjs'].includes(source.split('/').at(-1))});
+await writeFile('dist/portal.config.json',JSON.stringify({apiBase:endpoint.origin})+'\n');
 await writeFile('dist/.nojekyll','');
-console.log('Papaye Labs : sélection publique côté serveur, Scoubi Club sans compte.');
+console.log('Papaye Labs : tableau de bord authentifié et applications autonomes.');
