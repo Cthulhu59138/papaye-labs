@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 
 // One transactional migration handles both a fresh installation and the legacy
 // catalogue. Existing account hashes, sessions, IDs and revisions are untouched.
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 export function database(filename) {
   const sql = new DatabaseSync(filename);
   try {
@@ -26,6 +26,29 @@ export function database(filename) {
           if (!columns.has(name)) sql.exec(`ALTER TABLE projects ADD COLUMN ${name} ${definition}`);
         }
         sql.exec('PRAGMA user_version=1; COMMIT;');
+      } catch (error) { sql.exec('ROLLBACK'); throw error; }
+    }
+    if (version < 2) {
+      sql.exec('BEGIN IMMEDIATE');
+      try {
+        sql.exec(`
+          CREATE TABLE IF NOT EXISTS project_worksheets (
+            project_id TEXT PRIMARY KEY NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+            title TEXT NOT NULL, workbook BLOB NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS worksheet_rows (
+            project_id TEXT NOT NULL REFERENCES project_worksheets(project_id) ON DELETE RESTRICT,
+            id INTEGER NOT NULL CHECK(id BETWEEN 1 AND 1048576),
+            ref TEXT NOT NULL, subject TEXT NOT NULL, description TEXT NOT NULL,
+            code TEXT NOT NULL, articles TEXT NOT NULL, family TEXT NOT NULL,
+            pages TEXT NOT NULL, support TEXT NOT NULL,
+            priority TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT '',
+            comment TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL DEFAULT 1 CHECK(revision>=1),
+            PRIMARY KEY(project_id,id)
+          );
+          PRAGMA user_version=2;
+          COMMIT;
+        `);
       } catch (error) { sql.exec('ROLLBACK'); throw error; }
     }
     if (sql.prepare('PRAGMA foreign_key_check').all().length) throw new Error('Database foreign key integrity check failed.');

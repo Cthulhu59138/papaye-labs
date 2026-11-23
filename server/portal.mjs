@@ -1,5 +1,6 @@
 import {hashPassword, verifyPassword} from './password.mjs';
 import {timingSafeEqual} from 'node:crypto';
+import {exportWorksheet} from './export-worksheet.mjs';
 const OWNER_ID = 47718344;
 const OWNER = 'Cthulhu59138';
 const encode = value => btoa(String.fromCharCode(...value)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
@@ -66,6 +67,9 @@ function authorizeWrite(req,env,s) {if(req.headers.get('origin')!==env.APP_ORIGI
 async function body(req) {if(req.headers.get('content-type')?.split(';')[0].trim().toLowerCase()!=='application/json')throw new HttpError(415,'Format invalide.');const text=await req.text();if(Buffer.byteLength(text,'utf8')>48000)throw new HttpError(413,'Contenu trop long.');try{const data=JSON.parse(text);if(!data||typeof data!=='object'||Array.isArray(data))throw Error();return data;}catch{throw new HttpError(400,'Contenu invalide.');}}
 const PROJECT_STATUSES = new Set(['À qualifier','Idée','En préparation','En cours','En pause','Terminé']);
 const TASK_STATUSES = new Set(['À faire','En cours','Terminé']);
+const WORKSHEET_PRIORITIES = ['1 – Haute','2 – Moyenne','3 – Basse','Non prioritaire'];
+const WORKSHEET_STATUSES = ['Finalisé','En cours','À développer','En attente','Annulé','Autre'];
+const WORKSHEET_COLUMNS = 'id,ref,subject,description,code,articles,family,pages,support,priority,status,comment,revision';
 const PUBLIC_APP_URLS = new Set([
   'https://papaye-labs.fr/scoubi/',
   'https://papaye-labs.fr/malomatix/',
@@ -77,6 +81,7 @@ const rowProject = p => ({
   sourcePrivate:!!p.source_private,revision:p.revision,status:p.status,
   dueDate:p.due_date,notes:p.notes,archived:!!p.archived,
   accessStatus:applicationAccess(p.url,p.access_status),updatedAt:p.updated_at*1000,
+  ...(p.has_worksheet ? {hasWorksheet:true} : {}),
 });
 const rowTask = t => ({id:t.id,projectId:t.project_id,title:t.title,status:t.status,dueDate:t.due_date,revision:t.revision,createdAt:t.created_at*1000,updatedAt:t.updated_at*1000});
 function fields(data, allowed) {
@@ -109,10 +114,47 @@ function taskInput(data,current=null) {
   fields(data,current?['revision','title','status','dueDate']:['title','status','dueDate']);
   return {title:textInput(data.title===undefined?current?.title:data.title,200,true),status:statusInput(data.status===undefined?(current?.status??'À faire'):data.status,TASK_STATUSES),dueDate:dateInput(data.dueDate===undefined?(current?.due_date??null):data.dueDate)};
 }
-const getProject = (env,id) => env.DB.prepare('SELECT * FROM projects WHERE id=?').bind(id).first();
+const projectSelect = `SELECT projects.*, EXISTS
+  (SELECT 1 FROM project_worksheets WHERE project_id=projects.id) AS has_worksheet FROM projects`;
+const getProject = (env,id) => env.DB.prepare(projectSelect+' WHERE id=?').bind(id).first();
 const getTask = (env,id) => env.DB.prepare('SELECT * FROM tasks WHERE id=?').bind(id).first();
 async function requireProject(env,id) {const project=await getProject(env,id);if(!project)throw new HttpError(404,'Projet introuvable.');return project;}
 function activeProject(project) {if(project.archived)throw new HttpError(409,'Restaurez ce projet avant de modifier ses tâches.');}
+
+async function readWorksheet(env,projectId,download) {
+  const columns = download ? 'workbook' : 'title';
+  const worksheet = await env.DB.prepare(`SELECT ${columns} FROM project_worksheets WHERE project_id=?`).bind(projectId).first();
+  if (!worksheet) throw new HttpError(404,'Tableau introuvable.');
+  const rowColumns = download ? 'id,priority,status,comment' : WORKSHEET_COLUMNS;
+  const {results:rows} = await env.DB.prepare(`SELECT ${rowColumns} FROM worksheet_rows WHERE project_id=? ORDER BY id`).bind(projectId).all();
+  if (!download) return response({title:worksheet.title,rows,priorities:WORKSHEET_PRIORITIES,statuses:WORKSHEET_STATUSES});
+  const bytes = await exportWorksheet(worksheet.workbook,rows);
+  return new Response(bytes,{headers:{
+    'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'Content-Disposition':'attachment; filename="tableau-de-priorisation.xlsx"',
+    'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'
+  }});
+}
+
+async function changeWorksheetRow(req,env,projectId,rowId) {
+  const raw = await body(req);
+  fields(raw,['revision','priority','status','comment']);
+  const revision = revisionInput(raw.revision);
+  if (raw.priority!=='' && !WORKSHEET_PRIORITIES.includes(raw.priority)) throw new HttpError(400,'Priorité invalide.');
+  if (raw.status!=='' && !WORKSHEET_STATUSES.includes(raw.status)) throw new HttpError(400,'Statut invalide.');
+  const comment = notesInput(raw.comment);
+  if (!comment.isWellFormed()) throw new HttpError(400,'Le commentaire contient du texte Unicode invalide.');
+  const row = await env.DB.prepare(`UPDATE worksheet_rows SET priority=?,status=?,comment=?,revision=revision+1
+    WHERE project_id=? AND id=? AND revision=? AND EXISTS
+    (SELECT 1 FROM projects WHERE id=worksheet_rows.project_id AND archived=0) RETURNING ${WORKSHEET_COLUMNS}`)
+    .bind(raw.priority,raw.status,comment,projectId,rowId,revision).first();
+  if (row) return response({row});
+  const exists = await env.DB.prepare('SELECT projects.archived FROM worksheet_rows JOIN projects ON projects.id=worksheet_rows.project_id WHERE project_id=? AND worksheet_rows.id=?').bind(projectId,rowId).first();
+  if (!exists) throw new HttpError(404,'Ligne de tableau introuvable.');
+  if (exists.archived) throw new HttpError(409,'Restaurez ce projet avant de modifier le tableau.');
+  throw new HttpError(409,'Cette ligne a changé dans une autre fenêtre. Rechargez ses valeurs avant de reprendre la saisie.');
+}
+
 export async function handlePortal(req,env,fetcher=fetch) {
   const path=new URL(req.url).pathname;
   try {
@@ -150,7 +192,11 @@ export async function handlePortal(req,env,fetcher=fetch) {
       if(!result.meta.changes)throw new HttpError(409,'La session a changé. Reconnectez-vous.');
       return startSession(env,{login:account.login,version},data.remember);
     }
-    if(path==='/api/projects'&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT * FROM projects ORDER BY name COLLATE NOCASE').all();return response({projects:results.map(rowProject)});}
+    if(path==='/api/projects'&&req.method==='GET'){const {results}=await env.DB.prepare(projectSelect+' ORDER BY name COLLATE NOCASE').all();return response({projects:results.map(rowProject)});}
+    const worksheet = path.match(/^\/api\/projects\/([a-z0-9-]+)\/worksheet(\/download)?$/);
+    if (worksheet && req.method==='GET') return await readWorksheet(env,worksheet[1],Boolean(worksheet[2]));
+    const worksheetRow = path.match(/^\/api\/projects\/([a-z0-9-]+)\/worksheet\/rows\/([1-9]\d{0,6})$/);
+    if (worksheetRow && req.method==='PATCH') return await changeWorksheetRow(req,env,worksheetRow[1],Number(worksheetRow[2]));
     if(path==='/api/tasks'&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT * FROM tasks ORDER BY created_at,id').all();return response({tasks:results.map(rowTask)});}
     if(path==='/api/sync'&&req.method==='POST'){
       const repos=(await publicRepos(fetcher)).filter(r=>r.owner?.id===OWNER_ID&&!r.private&&r.name!=='papaye-labs'&&!r.fork&&!r.archived&&!r.disabled);

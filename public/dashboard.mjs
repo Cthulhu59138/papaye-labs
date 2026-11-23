@@ -1,6 +1,7 @@
 import {PROJECT_STATUSES,TASK_STATUSES,ACCESS_LABELS,SESSION_KEY,LOGOUT_KEY,escape as e,safeHref,parisDay,dateLabel,dueLabel,projectProgress,activeTasks,sortTasks,filterProjects,filterTasks,parseSession,canShare,validateProject,validateTask} from './dashboard-model.mjs';
 import {setFormBusy,readFormValues} from './dashboard-forms.mjs';
 import {createConfirmation} from './dashboard-confirm.mjs';
+import {worksheetFilters,worksheetMarkup,worksheetEditor} from './dashboard-worksheet.mjs';
 
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#editor');
@@ -14,6 +15,13 @@ const state = {
   filters:{projects:{query:'',status:'',archived:false},tasks:{query:'',status:'open',projectId:''}},
   editor:null,pendingDraft:null,activation:activation || null,setupAllowed:false,loginError:'',expiryTimer:null,
 };
+const initialProject = new URLSearchParams(location.search).get('projet');
+if (initialProject && /^[a-z0-9-]+$/.test(initialProject)) {
+  state.view = 'project';
+  state.selected = initialProject;
+}
+let worksheet = null;
+let sheetFilters = worksheetFilters();
 let returnFocus = null;
 let toastTimer;
 let validationPromise;
@@ -51,7 +59,7 @@ function hideEditor() {
   dialog.replaceChildren();state.editor = null;
 }
 function captureDraft() {
-  if (state.editor?.dirty && ['project','task'].includes(state.editor.kind)) {
+  if (state.editor?.dirty && ['project','task','worksheet'].includes(state.editor.kind)) {
     const form = dialog.querySelector('form');
     if (form) state.pendingDraft = {...state.editor,values:readFormValues(form),dirty:true};
   }
@@ -59,6 +67,8 @@ function captureDraft() {
 function purgePrivate({keepDraft=false}={}) {
   if (keepDraft) captureDraft(); else state.pendingDraft = null;
   confirmation.cancel();
+  worksheet = null;
+  if (!keepDraft) sheetFilters = worksheetFilters();
   state.epoch++;state.authenticated = false;state.projects=[];state.tasks=[];
   clearTimeout(state.expiryTimer);clearToast();hideEditor();app.replaceChildren();
 }
@@ -75,9 +85,9 @@ function scheduleExpiry() {
   },Math.min(Math.max(remaining,0),2147483647));
 }
 class ApiError extends Error {constructor(message,status=0){super(message);this.status=status;}}
-async function api(path,{method='GET',body,anonymous=false}={}) {
+async function api(path,{method='GET',body,anonymous=false,download=false}={}) {
   if (state.apiBase === null) throw new ApiError('Le service n’est pas encore prêt.');
-  const headers = {'Accept':'application/json'};
+  const headers = {'Accept':download?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'application/json'};
   const token = anonymous ? null : state.session?.sessionToken;
   if (token) headers.Authorization = `Bearer ${token}`;
   if (body !== undefined) headers['Content-Type']='application/json';
@@ -86,6 +96,7 @@ async function api(path,{method='GET',body,anonymous=false}={}) {
   try {
     response = await fetch(state.apiBase+path,{method,headers,body:body === undefined ? undefined : JSON.stringify(body),cache:'no-store',credentials:'omit',redirect:'error',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(20000)});
   } catch {throw new ApiError('Le service est momentanément indisponible. Vérifie ta connexion, puis réessaie.');}
+  if (download && response.ok) return response.blob();
   let result;
   try {result = await response.json();} catch {throw new ApiError('Le service a renvoyé une réponse inattendue.',response.status);}
   if (!response.ok) {
@@ -133,8 +144,15 @@ function progressMarkup(project) {
   const progress = projectProgress(project.id,state.tasks);
   return `<div class="progress-block"><span>${progress.total ? `${progress.done} tâche${progress.done > 1 ? 's' : ''} terminée${progress.done > 1 ? 's' : ''} sur ${progress.total}` : 'Aucune tâche'}</span>${progress.total ? `<progress max="${progress.total}" value="${progress.done}" aria-label="Avancement de ${e(project.name)}">${progress.percent}%</progress>` : '<span class="progress-empty" aria-hidden="true"></span>'}</div>`;
 }
+function externalProjectUrl(project) {
+  const href=safeHref(project.url);
+  if (!href || !project.hasWorksheet) return href;
+  const url=new URL(href);
+  const self=url.origin===location.origin && url.pathname==='/' && url.searchParams.get('projet')===project.id;
+  return self ? null : href;
+}
 function projectCard(project,compact=false) {
-  const href = safeHref(project.url);
+  const href = externalProjectUrl(project);
   return `<article class="project-card${compact ? ' compact' : ''}"><div class="project-card-top"><span class="project-monogram" aria-hidden="true">${e(project.name.slice(0,2).toUpperCase())}</span>${statusBadge(project.status)}</div><button class="project-name" data-action="open-project" data-id="${e(project.id)}">${e(project.name)} <span aria-hidden="true">↗</span></button><p class="project-description">${e(project.description || 'Une prochaine idée à faire grandir.')}</p>${progressMarkup(project)}<div class="project-meta"><span>${project.dueDate ? e(dateLabel(project.dueDate)) : 'Sans échéance'}</span><span class="access-dot ${project.accessStatus === 'public' ? 'public' : ''}">${e(ACCESS_LABELS[project.accessStatus] || ACCESS_LABELS.unknown)}</span></div><div class="card-actions"><button class="button small" data-action="open-project" data-id="${e(project.id)}">Voir le projet</button>${href ? `<a class="button text small" href="${e(href)}" target="_blank" rel="noopener noreferrer">Ouvrir <span aria-hidden="true">↗</span><span class="sr-only"> l’application ${e(project.name)}</span></a>` : ''}</div></article>`;
 }
 function taskRow(task,{showProject=true,readonly=false}={}) {
@@ -176,16 +194,61 @@ function projectView() {
   const project=projectById(state.selected);
   if (!project) return empty('Ce projet n’est plus disponible','Actualise le tableau de bord pour retrouver tes projets.','refresh','Actualiser');
   const tasks=sortTasks(state.tasks.filter(task=>task.projectId===project.id));
-  const href=safeHref(project.url),source=safeHref(project.source);
+  const href=externalProjectUrl(project),source=safeHref(project.source);
   return `<button class="button text back-link" data-view="projects">← Tous mes projets</button>`+
     heading(project.archived ? 'PROJET ARCHIVÉ' : 'FICHE PROJET',project.name,project.description || 'Les idées et les prochaines étapes de ce projet.',`<button class="button" data-action="${project.archived ? 'restore-project' : 'edit-project'}" data-id="${e(project.id)}">${project.archived ? 'Restaurer le projet' : 'Modifier le projet'}</button>`)+
-    `${project.archived ? '<div class="notice">Ce projet est archivé. Ses tâches et ses notes sont conservées ; restaure-le pour reprendre le suivi.</div>' : ''}<div class="detail-layout"><div class="detail-main"><section class="panel launch-panel"><div><span class="small-tag">APPLICATION</span><h2>${e(ACCESS_LABELS[project.accessStatus] || ACCESS_LABELS.unknown)}</h2><p class="muted">${project.accessStatus === 'public' ? 'Son adresse ouvre l’application. Ton suivi et tes notes restent privés.' : project.accessStatus === 'protected' ? 'L’application garde sa propre connexion. Son lien n’ouvre pas ton tableau de bord.' : 'Le suivi est privé. L’accès sans compte à cette application n’a pas été confirmé.'}</p></div><div class="launch-actions">${href ? `<a class="button primary" href="${e(href)}" target="_blank" rel="noopener noreferrer">Ouvrir l’application ↗</a>` : '<span class="muted">Aucune adresse d’application</span>'}${canShare(project) ? `<button class="button" data-action="share" data-id="${e(project.id)}">Copier le lien public</button>` : ''}${source ? `<a class="button text" href="${e(source)}" target="_blank" rel="noopener noreferrer">Ouvrir la ressource ↗</a>` : ''}</div></section><section class="panel"><div class="section-heading"><div><span class="small-tag">PROCHAINES ÉTAPES</span><h2>Tâches <span class="count">${tasks.length}</span></h2></div>${!project.archived ? `<button class="button small" data-action="new-task" data-project="${e(project.id)}">+ Ajouter</button>` : ''}</div>${tasks.length ? `<ul class="task-list">${tasks.map(task=>taskRow(task,{showProject:false,readonly:project.archived})).join('')}</ul>` : '<p class="quiet-empty">Aucune tâche pour le moment.</p>'}</section><section class="panel"><div class="section-heading"><div><span class="small-tag">POUR GARDER LE FIL</span><h2>Notes privées</h2></div>${!project.archived ? `<button class="button text small" data-action="edit-project" data-id="${e(project.id)}" data-focus="project-notes">Modifier</button>` : ''}</div>${project.notes ? `<div class="notes-text">${e(project.notes)}</div>` : '<p class="quiet-empty">Une idée, une décision, quelque chose à ne pas oublier…<br>Ces notes ne sont visibles que dans ton espace.</p>'}</section></div><aside class="detail-aside"><section class="panel project-summary"><span class="small-tag">LE POINT SUR LE PROJET</span><h2>Repères</h2><dl><div><dt>Statut</dt><dd>${statusBadge(project.status)}</dd></div><div><dt>Échéance</dt><dd>${e(dateLabel(project.dueDate))}</dd></div><div><dt>Avancement</dt><dd>${progressMarkup(project)}</dd></div></dl></section>${!project.archived ? `<section class="archive-box"><h3>Mettre de côté</h3><p>L’archivage garde les notes et les tâches, et libère la vue d’ensemble.</p><button class="button small" data-action="archive-project" data-id="${e(project.id)}">Archiver ce projet</button></section>` : ''}</aside></div>`;
+    (project.hasWorksheet ? '<section class="panel worksheet-panel" id="project-worksheet" aria-label="Tableau du projet"><p role="status">Chargement du tableau…</p></section>' : '')+
+    `${project.archived ? '<div class="notice">Ce projet est archivé. Ses tâches et ses notes sont conservées ; restaure-le pour reprendre le suivi.</div>' : ''}<div class="detail-layout"><div class="detail-main">${project.hasWorksheet && !href && !source ? '' : `<section class="panel launch-panel"><div><span class="small-tag">APPLICATION</span><h2>${e(ACCESS_LABELS[project.accessStatus] || ACCESS_LABELS.unknown)}</h2><p class="muted">${project.accessStatus === 'public' ? 'Son adresse ouvre l’application. Ton suivi et tes notes restent privés.' : project.accessStatus === 'protected' ? 'L’application garde sa propre connexion. Son lien n’ouvre pas ton tableau de bord.' : 'Le suivi est privé. L’accès sans compte à cette application n’a pas été confirmé.'}</p></div><div class="launch-actions">${href ? `<a class="button primary" href="${e(href)}" target="_blank" rel="noopener noreferrer">Ouvrir l’application ↗</a>` : '<span class="muted">Aucune adresse d’application</span>'}${canShare(project) ? `<button class="button" data-action="share" data-id="${e(project.id)}">Copier le lien public</button>` : ''}${source ? `<a class="button text" href="${e(source)}" target="_blank" rel="noopener noreferrer">Ouvrir la ressource ↗</a>` : ''}</div></section>`}<section class="panel"><div class="section-heading"><div><span class="small-tag">PROCHAINES ÉTAPES</span><h2>Tâches <span class="count">${tasks.length}</span></h2></div>${!project.archived ? `<button class="button small" data-action="new-task" data-project="${e(project.id)}">+ Ajouter</button>` : ''}</div>${tasks.length ? `<ul class="task-list">${tasks.map(task=>taskRow(task,{showProject:false,readonly:project.archived})).join('')}</ul>` : '<p class="quiet-empty">Aucune tâche pour le moment.</p>'}</section><section class="panel"><div class="section-heading"><div><span class="small-tag">POUR GARDER LE FIL</span><h2>Notes privées</h2></div>${!project.archived ? `<button class="button text small" data-action="edit-project" data-id="${e(project.id)}" data-focus="project-notes">Modifier</button>` : ''}</div>${project.notes ? `<div class="notes-text">${e(project.notes)}</div>` : '<p class="quiet-empty">Une idée, une décision, quelque chose à ne pas oublier…<br>Ces notes ne sont visibles que dans ton espace.</p>'}</section></div><aside class="detail-aside"><section class="panel project-summary"><span class="small-tag">LE POINT SUR LE PROJET</span><h2>Repères</h2><dl><div><dt>Statut</dt><dd>${statusBadge(project.status)}</dd></div><div><dt>Échéance</dt><dd>${e(dateLabel(project.dueDate))}</dd></div><div><dt>Avancement</dt><dd>${progressMarkup(project)}</dd></div></dl></section>${!project.archived ? `<section class="archive-box"><h3>Mettre de côté</h3><p>L’archivage garde les notes et les tâches, et libère la vue d’ensemble.</p><button class="button small" data-action="archive-project" data-id="${e(project.id)}">Archiver ce projet</button></section>` : ''}</aside></div>`;
 }
 function renderContent({restoreInput}={}) {
   const content=document.querySelector('#content');
   if (!content || !state.authenticated) return;
   content.innerHTML=({overview,projects:projectsView,tasks:tasksView,project:projectView})[state.view]();
+  if (document.getElementById('project-worksheet')) showWorksheet();
   if (restoreInput) {const input=document.getElementById(restoreInput.id);input?.focus({preventScroll:true});if (typeof restoreInput.start==='number') try {input.setSelectionRange(restoreInput.start,restoreInput.end);} catch {}}
+}
+function worksheetPath(id) {return '/api/projects/'+encodeURIComponent(id)+'/worksheet';}
+function currentSheetRow(id) {return worksheet?.data?.rows.find(row=>String(row.id)===String(id));}
+function mayRenderSheet(current) {
+  return current===worksheet && state.authenticated && state.selected===current.id && state.view==='project';
+}
+async function fetchWorksheet(projectId,force=false) {
+  if (!force && worksheet?.id===projectId) return worksheet.loading;
+  const current = {id:projectId,data:null,error:'',loading:null};
+  worksheet = current;
+  current.loading = api(worksheetPath(projectId)).then(result=>{
+    if (!Array.isArray(result.rows)||!Array.isArray(result.priorities)||!Array.isArray(result.statuses)) throw new ApiError('Le tableau reçu est incomplet.');
+    current.data=result;
+  }).catch(error=>{current.error=error.message;});
+  return current.loading;
+}
+function drawWorksheet() {
+  const panel=document.getElementById('project-worksheet');
+  if (!panel || !worksheet || !mayRenderSheet(worksheet)) return;
+  if (worksheet.error) {
+    panel.innerHTML=`<div role="alert">${e(worksheet.error)}</div><button class="button" data-action="worksheet-retry">Réessayer</button>`;
+  } else if (worksheet.data) {
+    panel.innerHTML=worksheetMarkup(worksheet.data,sheetFilters,projectById(worksheet.id)?.archived);
+  }
+}
+async function showWorksheet() {
+  const id=state.selected;
+  if (worksheet?.id!==id || !worksheet.data) await fetchWorksheet(id);
+  drawWorksheet();
+}
+async function downloadWorksheet(button) {
+  const current=worksheet;
+  if (!current || !mayRenderSheet(current)) return;
+  button.disabled=true;
+  try {
+    const blob=await api(worksheetPath(current.id)+'/download',{download:true});
+    if (!mayRenderSheet(current)) return;
+    const href=URL.createObjectURL(blob), link=document.createElement('a');
+    link.href=href;link.download=(projectById(current.id)?.name || 'Tableau')+'.xlsx';
+    document.body.append(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(href),30000);
+  } catch(error) {if(mayRenderSheet(current)) notify(error.message);}
+  finally {if(button.isConnected)button.disabled=false;}
 }
 async function loadData(epoch) {
   const [projects,tasks]=await Promise.all([api('/api/projects'),api('/api/tasks')]);
@@ -259,6 +322,13 @@ function openEditor(kind,id=null,{projectId=null,values=null,revision=null,focus
     const projects=state.projects.filter(project=>!project.archived);
     body=`<label for="task-title">Prochaine action <span class="required">*</span></label><input id="task-title" name="title" maxlength="200" required value="${e(value.title)}" placeholder="Une action concrète…"><label for="task-project">Projet</label>${id?`<input name="projectId" type="hidden" value="${e(value.projectId)}"><p class="readonly-field">${e(projectById(value.projectId)?.name)}</p>`:`<select id="task-project" name="projectId" required>${projects.map(project=>`<option value="${e(project.id)}"${project.id===value.projectId?' selected':''}>${e(project.name)}</option>`).join('')}</select>`}<div class="form-grid"><div><label for="task-status">Statut</label><select id="task-status" name="status">${options(TASK_STATUSES,value.status)}</select></div><div><label for="task-due">Échéance <span class="optional">facultatif</span></label><input id="task-due" name="dueDate" type="date" value="${e(value.dueDate || '')}"></div></div>`;
     footer=`${id?'<button type="button" class="button text danger push-left" data-action="delete-task">Supprimer</button>':''}<button type="button" class="button" data-action="close-editor">Annuler</button><button type="submit" class="button primary">Enregistrer la tâche</button>`;
+  } else if(kind==='worksheet') {
+    const row=currentSheetRow(id);
+    if(!row || worksheet.id!==projectId || projectById(projectId)?.archived){state.editor=null;return;}
+    state.editor.revision=revision??row.revision;
+    title='Modifier le suivi';
+    body=worksheetEditor(row,worksheet.data,values||row);
+    footer='<button type="button" class="button" data-action="close-editor">Annuler</button><button type="submit" class="button primary">Enregistrer</button>';
   } else if(kind==='account') {
     title='Mon compte';
     body=`<p class="account-intro">Connecté avec <strong>${e(state.session.login)}</strong>.</p><h3>Changer mon mot de passe</h3><p class="field-hint">Ce changement déconnecte tes autres sessions.</p><label for="current-password">Mot de passe actuel</label><input id="current-password" type="password" name="currentPassword" autocomplete="current-password" maxlength="256" required><label for="new-password">Nouvelle phrase de passe</label><input id="new-password" type="password" name="password" autocomplete="new-password" minlength="12" maxlength="256" required><p class="field-hint">Au moins 12 caractères, sans symbole obligatoire.</p><label for="confirm-password">Confirmer</label><input id="confirm-password" type="password" name="confirmation" autocomplete="new-password" minlength="12" maxlength="256" required><label class="check-label"><input type="checkbox" name="remember"${state.remember?' checked':''}><span>Rester connecté pendant 30 jours</span></label>`;
@@ -300,6 +370,10 @@ async function saveEditor(form) {
       const result=await api(editor.id?`/api/tasks/${encodeURIComponent(editor.id)}`:`/api/projects/${encodeURIComponent(values.projectId)}/tasks`,{method:editor.id?'PATCH':'POST',body});
       if(epoch!==state.epoch)return;
       state.tasks=editor.id?state.tasks.map(task=>task.id===editor.id?result.task:task):[...state.tasks,result.task];
+    } else if(editor.kind==='worksheet') {
+      const result=await api(worksheetPath(editor.projectId)+'/rows/'+encodeURIComponent(editor.id),{method:'PATCH',body:{revision:editor.revision,priority:values.priority,status:values.status,comment:values.comment}});
+      if(epoch!==state.epoch || worksheet?.id!==editor.projectId)return;
+      worksheet.data.rows=worksheet.data.rows.map(row=>row.id===result.row.id?result.row:row);
     } else {
       const remember=values.remember==='on';
       const result=await api('/api/password',{method:'POST',body:{currentPassword:values.currentPassword,password:values.password,remember}});
@@ -322,7 +396,17 @@ async function reloadEditor() {
   const accepted=await confirmation.request({title:'Charger la version actuelle ?',message:'Les champs de ce formulaire seront remplacés par la dernière version enregistrée. Ton brouillon actuel sera abandonné.',confirmLabel:'Charger la version',destructive:true});
   if(!accepted||epoch!==state.epoch||state.editor!==editor||!form.isConnected)return;
   submitting(form,true,editorValues());
-  try {if(await loadData(epoch)){state.editor.dirty=false;openEditor(kind,id,{projectId});renderPrivate();}}
+  try {
+    if(kind==='worksheet') {
+      await fetchWorksheet(projectId,true);
+      if(epoch!==state.epoch || state.editor!==editor)return;
+      if(worksheet?.error)throw new ApiError(worksheet.error);
+      if(!currentSheetRow(id))throw new ApiError('Cette option ne figure plus dans le tableau.');
+      openEditor(kind,id,{projectId});drawWorksheet();
+    } else if(await loadData(epoch)){
+      state.editor.dirty=false;openEditor(kind,id,{projectId});renderPrivate();
+    }
+  }
   catch(error){if(epoch===state.epoch)formError(form,error.message);}
   finally {if(form.isConnected)submitting(form,false);}
 }
@@ -389,6 +473,10 @@ async function logout() {
 }
 function navigate(view,id=null) {
   if(!state.authenticated)return;
+  if (id!==state.selected || view!=='project') {worksheet=null;sheetFilters=worksheetFilters();}
+  const url=new URL(location.href);
+  if(view==='project' && id)url.searchParams.set('projet',id);else url.searchParams.delete('projet');
+  history.replaceState(null,'',url);
   state.view=view;state.selected=id;renderPrivate({focus:true});window.scrollTo({top:0,behavior:'instant'});
 }
 async function discardDraft() {
@@ -404,6 +492,16 @@ async function handleAction(button) {
   if(action==='close-editor'){await closeEditor();return;}
   if(!state.authenticated)return;
   switch(action) {
+    case 'worksheet-edit':openEditor('worksheet',id,{projectId:state.selected});break;
+    case 'worksheet-download':await downloadWorksheet(button);break;
+    case 'worksheet-retry':await fetchWorksheet(state.selected,true);drawWorksheet();break;
+    case 'worksheet-page':{
+      sheetFilters.page=Number(button.dataset.page);
+      drawWorksheet();
+      const heading=document.getElementById('worksheet-title');
+      if(heading){heading.tabIndex=-1;heading.focus();}
+      break;
+    }
     case 'new-project':openEditor('project');break;
     case 'edit-project':openEditor('project',id,{focus:button.dataset.focus});break;
     case 'open-project':navigate('project',id);break;
@@ -423,7 +521,16 @@ async function handleAction(button) {
     case 'reset-project-filters':state.filters.projects={query:'',status:'',archived:false};renderContent();break;
     case 'reset-task-filters':state.filters.tasks={query:'',status:'open',projectId:''};renderContent();break;
     case 'discard-draft':await discardDraft();break;
-    case 'resume-draft':{const draft=state.pendingDraft;if(draft?.id&&!(draft.kind==='project'?projectById(draft.id):taskById(draft.id))){notify('L’élément du brouillon n’est plus disponible. Le brouillon reste conservé dans cet onglet.');break;}state.pendingDraft=null;renderPrivate();if(draft)openEditor(draft.kind,draft.id,{...draft});break;}
+    case 'resume-draft':{const draft=state.pendingDraft;
+      if(draft?.kind==='worksheet'){
+        const project=projectById(draft.projectId), epoch=state.epoch;
+        if(!project?.hasWorksheet || project.archived){notify('Le tableau de ce brouillon est indisponible.');break;}
+        navigate('project',project.id);await fetchWorksheet(project.id);
+        if(epoch!==state.epoch || state.pendingDraft!==draft || state.selected!==project.id)break;
+        if(!currentSheetRow(draft.id)){notify(worksheet?.error || 'Cette option est indisponible. Ton brouillon est conservé.');break;}
+        state.pendingDraft=null;renderPrivate();openEditor('worksheet',draft.id,draft);break;
+      }
+      if(draft?.id&&!(draft.kind==='project'?projectById(draft.id):taskById(draft.id))){notify('L’élément du brouillon n’est plus disponible. Le brouillon reste conservé dans cet onglet.');break;}state.pendingDraft=null;renderPrivate();if(draft)openEditor(draft.kind,draft.id,{...draft});break;}
   }
 }
 document.addEventListener('click',event=>{
@@ -439,7 +546,19 @@ dialog.addEventListener('input',()=>{if(state.editor)state.editor.dirty=true;});
 dialog.addEventListener('change',()=>{if(state.editor)state.editor.dirty=true;});
 dialog.addEventListener('cancel',event=>{event.preventDefault();closeEditor();});
 function updateFilter(event) {
-  const input=event.target;const key=input.dataset.filter;if(!key)return;
+  const input=event.target;
+  const sheetKey=input.dataset.worksheetFilter;
+  if(sheetKey) {
+    if((input.tagName==='SELECT')!==(event.type==='change'))return;
+    sheetFilters[sheetKey]=input.value;sheetFilters.page=1;
+    const start=input.selectionStart,end=input.selectionEnd;
+    drawWorksheet();
+    const replacement=document.getElementById(input.id);
+    replacement?.focus({preventScroll:true});
+    if(typeof start==='number')replacement?.setSelectionRange(start,end);
+    return;
+  }
+  const key=input.dataset.filter;if(!key)return;
   if(event.type==='input'&&input.tagName==='SELECT')return;
   if(event.type==='change'&&input.tagName==='INPUT')return;
   const mappings={'project-query':['projects','query'],'project-status':['projects','status'],'project-archive':['projects','archived'],'task-query':['tasks','query'],'task-status':['tasks','status'],'task-project':['tasks','projectId']};
