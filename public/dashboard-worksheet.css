@@ -1,0 +1,32 @@
+.worksheet-panel { margin: 0 0 24px; }
+.ws-heading, .ws-pager { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+.ws-heading h2 { font-size: 1.45rem; }
+.ws-filters { display: grid; grid-template-columns: minmax(150px,2fr) repeat(3,minmax(116px,1fr)); gap: 12px; margin: 20px 0 12px; }
+.ws-filters label { margin: 0; font-size: 1rem; }
+.ws-filters select, .ws-filters input:not([type=checkbox]) { margin: 5px 0 0; font-size: 1rem; }
+.ws-count, .ws-pager { font-size: 1rem; color: var(--muted); }
+.ws-count { margin: 10px 0; }
+.ws-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 1rem; line-height: 1.5; }
+.ws-table th { text-align: left; color: var(--muted); font-size: 1rem; font-weight: 600; padding: 9px 10px; background: var(--paper); }
+.ws-table th:first-child { width: 53%; }
+.ws-table td { padding: 15px 10px; vertical-align: top; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.ws-table td p { margin: 5px 0; }
+.ws-subject { font-size: 1.12rem; }
+.ws-table small { display: block; color: var(--muted); margin-top: 4px; font-size: .94rem; }
+.ws-table .button { margin-top: 8px; }
+.ws-table details { color: var(--muted); font-size: .94rem; }
+.ws-table details summary { cursor: pointer; width: fit-content; padding: 3px 0; }
+.ws-comment { white-space: pre-wrap; }
+.ws-pager { justify-content: flex-end; margin-top: 16px; }
+@media (max-width: 1100px) { .ws-filters { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 750px) {
+  .ws-heading { align-items: flex-start; }
+  .worksheet-panel { padding: 17px; }
+  .ws-table, .ws-table tbody, .ws-table tr, .ws-table td { display: block; width: 100%; }
+  .ws-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .ws-table tr { border-top: 1px solid var(--border); padding: 12px 0; }
+  .ws-table td { border: 0; padding: 4px 0; }
+  .ws-table td[data-label]::before { display: block; content: attr(data-label); color: var(--muted); font-size: .95rem; margin: 4px 0; }
+  .ws-pager { justify-content: center; }
+}
+@media (max-width: 400px) { .ws-filters { grid-template-columns: 1fr; } }

@@ -20,7 +20,7 @@ test('legacy migration preserves catalogue IDs, revision, account and sessions a
     INSERT INTO sessions VALUES ('test-session','version','test-csrf',9999999999);`);
   old.close();let DB=database(path);
   let p=DB.sql.prepare('SELECT * FROM projects').get();assert.equal(p.id,'legacy');assert.equal(p.revision,7);assert.equal(p.description,'Notes legacy description');assert.equal(p.url,'https://private.example/');assert.equal(p.notes,'');assert.equal(p.status,'À qualifier');assert.equal(p.archived,0);assert.equal(p.access_status,'unknown');
-  assert.equal(DB.sql.prepare('PRAGMA user_version').get().user_version,1);assert.equal(DB.sql.prepare('PRAGMA foreign_keys').get().foreign_keys,1);
+  assert.equal(DB.sql.prepare('PRAGMA user_version').get().user_version,2);assert.equal(DB.sql.prepare('PRAGMA foreign_keys').get().foreign_keys,1);
   assert.equal(DB.sql.prepare('SELECT password FROM account').get().password,'test-hash-not-a-secret');assert.equal(DB.sql.prepare('SELECT count(*) AS n FROM sessions').get().n,1);
   DB.sql.prepare('UPDATE projects SET notes=?,status=?').run('After migration','En cours');DB.sql.close();DB=database(path);
   p=DB.sql.prepare('SELECT * FROM projects').get();assert.equal(p.notes,'After migration');assert.equal(p.status,'En cours');assert.equal(p.revision,7);DB.sql.close();
@@ -36,6 +36,22 @@ test('foreign keys forbid orphan tasks and schema migration failure leaves legac
 
 test('future schema is rejected without mutation',t=>{
   const path=join(directory(t),'future.sqlite');const old=new DatabaseSync(path);old.exec('PRAGMA user_version=99');old.close();assert.throws(()=>database(path),/newer/);const check=new DatabaseSync(path);assert.equal(check.prepare('PRAGMA user_version').get().user_version,99);check.close();
+});
+
+test('version 1 catalogue gains private worksheets while retaining existing project choices',t=>{
+  const path=join(directory(t),'dashboard.sqlite');
+  const original=database(path);
+  original.sql.exec(`DROP TABLE worksheet_rows; DROP TABLE project_worksheets; PRAGMA user_version=1;
+    INSERT INTO projects (id,name,description,url,source,revision,updated_at,status,notes)
+    VALUES ('example','Projet existant','','','',9,123,'En pause','Note existante');`);
+  original.sql.close();
+  const migrated=database(path);
+  assert.equal(migrated.sql.prepare('PRAGMA user_version').get().user_version,2);
+  assert.deepEqual({...migrated.sql.prepare('SELECT revision,status,notes FROM projects WHERE id=?').get('example')},
+    {revision:9,status:'En pause',notes:'Note existante'});
+  assert.equal(migrated.sql.prepare('SELECT count(*) AS n FROM project_worksheets').get().n,0);
+  assert.throws(()=>migrated.sql.prepare('INSERT INTO project_worksheets VALUES (?,?,?)').run('missing','Tableau fictif',Buffer.from('test')),/FOREIGN KEY/);
+  migrated.sql.close();
 });
 
 test('private data and authentication survive reopen and a real SQLite backup can be restored',async t=>{

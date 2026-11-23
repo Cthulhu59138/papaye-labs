@@ -12,7 +12,7 @@ install -d -o root -g root -m 755 /opt/papaye-api /opt/papaye-api/app
 cp -a "$runtime" /opt/papaye-api/node
 chown -R root:root /opt/papaye-api/node
 chmod -R a+rX /opt/papaye-api/node
-for file in http.mjs database.mjs portal.mjs password.mjs admin.mjs backup.mjs schema.sql; do install -o root -g root -m 644 "$stage/$file" "/opt/papaye-api/app/$file"; done
+for file in http.mjs database.mjs portal.mjs password.mjs admin.mjs backup.mjs schema.sql export-worksheet.mjs export-worksheet.py; do install -o root -g root -m 644 "$stage/$file" "/opt/papaye-api/app/$file"; done
 install -d -o papaye-api -g papaye-api -m 700 /var/lib/papaye-api /var/lib/papaye-api/backups
 install -d -o root -g papaye-api -m 750 /etc/papaye-api
 umask 077
