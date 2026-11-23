@@ -1,7 +1,7 @@
 import {PROJECT_STATUSES,TASK_STATUSES,ACCESS_LABELS,SESSION_KEY,LOGOUT_KEY,escape as e,safeHref,parisDay,dateLabel,dueLabel,projectProgress,activeTasks,sortTasks,filterProjects,filterTasks,parseSession,canShare,validateProject,validateTask} from './dashboard-model.mjs';
 import {setFormBusy,readFormValues} from './dashboard-forms.mjs';
 import {createConfirmation} from './dashboard-confirm.mjs';
-import {worksheetFilters,worksheetMarkup,worksheetPage,worksheetFeedback,worksheetRecovery,worksheetCount,pageForIndex} from './dashboard-worksheet.mjs';
+import {worksheetFilters,worksheetMarkup,worksheetPage,worksheetFeedback,worksheetRecovery,worksheetCount,pageForIndex} from './dashboard-worksheet.mjs?v=3';
 import {createWorksheetEdits} from './dashboard-worksheet-edits.mjs';
 
 const app = document.querySelector('#app');
@@ -248,6 +248,17 @@ async function fetchWorksheet(projectId,force=false) {
   }).catch(error=>{current.error=error.message;});
   return current.loading;
 }
+function updateWorksheetProgress() {
+  const status=document.getElementById('ws-save-status');
+  if(!status || !worksheet)return;
+  const drafts=sheetEdits.list(worksheet.id);
+  let text='';
+  if(drafts.some(d=>d.busy))text='Enregistrement…';
+  else if(drafts.some(d=>d.error))text='Saisie à reprendre';
+  else if(drafts.length)text='Saisie en attente…';
+  else if(worksheet.didSave)text='Modifications enregistrées.';
+  if(status.textContent!==text)status.textContent=text;
+}
 function drawWorksheet() {
   const panel=document.getElementById('project-worksheet');
   if (!panel || !worksheet || !mayRenderSheet(worksheet)) return;
@@ -257,6 +268,7 @@ function drawWorksheet() {
     const active=panel.contains(document.activeElement)?document.activeElement:null;
     const edits=sheetEdits.list(worksheet.id);
     panel.innerHTML=worksheetMarkup(worksheet.data,sheetFilters,projectById(worksheet.id)?.archived,new Map(edits.map(d=>[d.id,d])));
+    updateWorksheetProgress();
     if(active?.id) {
       const target=document.getElementById(active.id) || (active.dataset.wsField && panel.querySelector('[data-ws-field="'+active.dataset.wsField+'"]')) || document.getElementById('worksheet-query');
       target?.focus({preventScroll:true});
@@ -275,12 +287,7 @@ function syncWorksheetRow(project,id) {
     drawWorksheet();
     return;
   }
-  const status=document.getElementById('ws-save-status');
-  if(status) {
-    const drafts=sheetEdits.list(project);
-    const text=drafts.some(d=>d.busy)?'Enregistrement…':drafts.some(d=>d.error)?'Saisie à reprendre':drafts.length?'Saisie en attente…':worksheet.didSave?'Modifications enregistrées.':'';
-    if(status.textContent!==text)status.textContent=text;
-  }
+  updateWorksheetProgress();
   const row=currentSheetRow(id);
   if(!row)return;
   const entry=sheetEdits.get(project,id);
