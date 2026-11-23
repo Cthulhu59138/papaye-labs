@@ -94,7 +94,7 @@ async function api(path,{method='GET',body,anonymous=false,download=false}={}) {
   if (method !== 'GET' && !anonymous && state.session?.csrf) headers['X-CSRF-Token']=state.session.csrf;
   let response;
   try {
-    response = await fetch(state.apiBase+path,{method,headers,body:body === undefined ? undefined : JSON.stringify(body),cache:'no-store',credentials:'omit',redirect:'error',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(20000)});
+    response = await fetch(state.apiBase+path,{method,headers,body:body === undefined ? undefined : JSON.stringify(body),cache:'no-store',credentials:'omit',redirect:'error',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(60000)});
   } catch {throw new ApiError('Le service est momentanément indisponible. Vérifie ta connexion, puis réessaie.');}
   if (download && response.ok) return response.blob();
   let result;
