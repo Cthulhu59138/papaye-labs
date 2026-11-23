@@ -382,7 +382,15 @@ async function saveEditor(form) {
     }
     if(epoch!==state.epoch)return;
     state.editor.dirty=false;
-    closeEditor({force:true});renderPrivate({focus:true});notify(editor.kind==='account'?'Mot de passe modifié. Les autres sessions sont déconnectées.':'C’est enregistré.');
+    closeEditor({force:true});
+    if(editor.kind==='worksheet') {
+      drawWorksheet();
+      const target=document.getElementById('ws-toggle-'+editor.id) || document.getElementById('worksheet-query');
+      target?.focus({preventScroll:true});
+    } else {
+      renderPrivate({focus:true});
+    }
+    notify(editor.kind==='account'?'Mot de passe modifié. Les autres sessions sont déconnectées.':'C’est enregistré.');
   } catch(error) {
     if(epoch!==state.epoch)return;
     formError(form,error.message);
@@ -492,11 +500,25 @@ async function handleAction(button) {
   if(action==='close-editor'){await closeEditor();return;}
   if(!state.authenticated)return;
   switch(action) {
+    case 'worksheet-toggle': {
+      sheetFilters.expandedId=sheetFilters.expandedId===id?null:id;
+      drawWorksheet();
+      const toggle=document.getElementById('ws-toggle-'+id);
+      if(toggle) {
+        toggle.focus({preventScroll:true});
+        const bounds=toggle.getBoundingClientRect();
+        const sidebar=document.querySelector('.sidebar')?.getBoundingClientRect();
+        const top=sidebar && sidebar.right>bounds.left?sidebar.bottom:0;
+        if(bounds.top<top || bounds.bottom>window.innerHeight) toggle.scrollIntoView({block:'center'});
+      }
+      break;
+    }
     case 'worksheet-edit':openEditor('worksheet',id,{projectId:state.selected});break;
     case 'worksheet-download':await downloadWorksheet(button);break;
     case 'worksheet-retry':await fetchWorksheet(state.selected,true);drawWorksheet();break;
     case 'worksheet-page':{
       sheetFilters.page=Number(button.dataset.page);
+      sheetFilters.expandedId=null;
       drawWorksheet();
       const heading=document.getElementById('worksheet-title');
       if(heading){heading.tabIndex=-1;heading.focus();}
@@ -550,7 +572,7 @@ function updateFilter(event) {
   const sheetKey=input.dataset.worksheetFilter;
   if(sheetKey) {
     if((input.tagName==='SELECT')!==(event.type==='change'))return;
-    sheetFilters[sheetKey]=input.value;sheetFilters.page=1;
+    sheetFilters[sheetKey]=input.value;sheetFilters.page=1;sheetFilters.expandedId=null;
     const start=input.selectionStart,end=input.selectionEnd;
     drawWorksheet();
     const replacement=document.getElementById(input.id);

@@ -1,32 +1,52 @@
 .worksheet-panel { margin: 0 0 24px; }
 .ws-heading, .ws-pager { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
 .ws-heading h2 { font-size: 1.45rem; }
-.ws-filters { display: grid; grid-template-columns: minmax(150px,2fr) repeat(3,minmax(116px,1fr)); gap: 12px; margin: 20px 0 12px; }
-.ws-filters label { margin: 0; font-size: 1rem; }
-.ws-filters select, .ws-filters input:not([type=checkbox]) { margin: 5px 0 0; font-size: 1rem; }
-.ws-count, .ws-pager { font-size: 1rem; color: var(--muted); }
-.ws-count { margin: 10px 0; }
-.ws-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 1rem; line-height: 1.5; }
-.ws-table th { text-align: left; color: var(--muted); font-size: 1rem; font-weight: 600; padding: 9px 10px; background: var(--paper); }
-.ws-table th:first-child { width: 53%; }
-.ws-table td { padding: 15px 10px; vertical-align: top; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
-.ws-table td p { margin: 5px 0; }
-.ws-subject { font-size: 1.12rem; }
-.ws-table small { display: block; color: var(--muted); margin-top: 4px; font-size: .94rem; }
-.ws-table .button { margin-top: 8px; }
-.ws-table details { color: var(--muted); font-size: .94rem; }
-.ws-table details summary { cursor: pointer; width: fit-content; padding: 3px 0; }
-.ws-comment { white-space: pre-wrap; }
-.ws-pager { justify-content: flex-end; margin-top: 16px; }
-@media (max-width: 1100px) { .ws-filters { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-@media (max-width: 750px) {
-  .ws-heading { align-items: flex-start; }
-  .worksheet-panel { padding: 17px; }
-  .ws-table, .ws-table tbody, .ws-table tr, .ws-table td { display: block; width: 100%; }
-  .ws-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .ws-table tr { border-top: 1px solid var(--border); padding: 12px 0; }
-  .ws-table td { border: 0; padding: 4px 0; }
-  .ws-table td[data-label]::before { display: block; content: attr(data-label); color: var(--muted); font-size: .95rem; margin: 4px 0; }
+.ws-filters { display: grid; grid-template-columns: minmax(150px,2fr) repeat(3,minmax(116px,1fr)); gap: 10px; margin: 14px 0 8px; }
+.ws-filters label { margin: 0; }
+.ws-filters select, .ws-filters input:not([type=checkbox]) { min-width: 0; margin: 3px 0 0; padding: 7px 9px; font-size: 1rem; }
+.ws-count, .ws-pager { color: var(--muted); }
+.ws-count { margin: 8px 0; font-size: .94rem; }
+.ws-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 1rem; line-height: 1.35; }
+.ws-table th { text-align: left; color: var(--muted); font-size: .92rem; font-weight: 600; padding: 7px 9px; background: var(--paper); }
+.ws-table th:first-child { width: 66%; }
+.ws-summary { border-bottom: 1px solid var(--border); cursor: pointer; }
+.ws-summary td { padding: 0 9px; vertical-align: middle; overflow-wrap: anywhere; }
+.ws-summary td:first-child { padding: 0; }
+.ws-toggle { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 34px; padding: 6px 9px; background: transparent; color: var(--ink); border: 0; text-align: left; font-weight: 600; line-height: inherit; overflow-wrap: anywhere; }
+.ws-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ws-chevron { flex: 0 0 auto; width: 7px; height: 7px; border: solid var(--accent); border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); }
+.ws-selected .ws-chevron { transform: rotate(45deg); }
+@media (hover: hover) { .ws-summary:hover { background: var(--paper); } }
+.ws-summary.ws-selected { background: var(--accent-soft); border-bottom-color: transparent; }
+.ws-unset { color: var(--muted); }
+.ws-mobile-label { display: none; }
+.ws-detail > td { padding: 0; border-bottom: 1px solid var(--border); }
+.ws-detail-body { padding: 12px 16px 14px 24px; border-left: 2px solid var(--accent); overflow-wrap: anywhere; }
+.ws-description { margin: 0 0 12px; }
+.ws-references { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.ws-references dt, .ws-followup strong { font-size: .9rem; font-weight: 600; color: var(--muted); }
+.ws-references dd { margin: 2px 0 0; }
+.ws-followup { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.ws-comment { margin: 2px 0 0; white-space: pre-wrap; }
+.ws-pager { justify-content: flex-end; margin-top: 12px; }
+@media (max-width: 1100px) {
+  .ws-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 700px) {
+  .worksheet-panel { padding: 14px; }
+  .ws-heading { gap: 6px; }
   .ws-pager { justify-content: center; }
 }
-@media (max-width: 400px) { .ws-filters { grid-template-columns: 1fr; } }
+@media (max-width: 550px) {
+  .ws-table, .ws-table tbody, .ws-detail, .ws-detail > td { display: block; width: 100%; }
+  .ws-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .ws-summary { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 16px; padding: 0 6px; }
+  .ws-summary td:first-child { width: 100%; }
+  .ws-toggle { min-height: 40px; padding: 6px 2px; }
+  .ws-summary .ws-choice { padding: 0 0 6px; font-size: .88rem; }
+  .ws-summary .ws-choice:not(.ws-unset) { margin-top: -2px; }
+  .ws-summary .ws-choice:nth-child(2), .ws-summary .ws-unset + .ws-choice { margin-left: 19px; }
+  .ws-summary .ws-unset { display: none; }
+  .ws-mobile-label { display: inline; color: var(--muted); }
+  .ws-detail-body { padding: 10px 9px 12px 16px; }
+}

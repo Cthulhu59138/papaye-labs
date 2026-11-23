@@ -1,7 +1,7 @@
 import {escape as e} from './dashboard-model.mjs';
 
 const pageSize = 12;
-export const worksheetFilters = () => ({query:'',code:'',priority:'',status:'',page:1});
+export const worksheetFilters = () => ({query:'',code:'',priority:'',status:'',page:1,expandedId:null});
 
 export function filterWorksheet(rows,filters) {
   const needle = filters.query.trim().toLocaleLowerCase('fr');
@@ -26,15 +26,36 @@ export function worksheetEditor(row,sheet,values=row) {
     <label for="worksheet-edit-comment">Commentaire libre</label><textarea id="worksheet-edit-comment" name="comment" rows="4" maxlength="8000">${e(values.comment)}</textarea>`;
 }
 
-function rowsMarkup(rows,archived) {
-  return rows.map(row => `<tr>
-    <td><strong class="ws-subject">${e(row.subject)}</strong><p>${e(row.description)}</p>
-    <details><summary>Repères et support</summary><div>${[row.ref,row.family,row.support].filter(Boolean).map(e).join(' · ')}</div></details></td>
-    <td data-label="Référence"><strong>${e(row.code)}</strong><br>${e(row.articles)}${row.pages?`<small>PDF p. ${e(row.pages)}</small>`:''}</td>
-    <td data-label="Choix"><div>${row.priority?e(row.priority):'Priorité à choisir'}</div><div>${row.status?e(row.status):'Statut à choisir'}</div>
-    ${row.comment?`<p class="ws-comment">${e(row.comment)}</p>`:''}
-    ${archived?'':`<button class="button small" data-action="worksheet-edit" data-id="${e(row.id)}" aria-label="Modifier le suivi de ${e(row.subject)}">Modifier</button>`}</td>
-  </tr>`).join('');
+function detailMarkup(row,archived) {
+  const references = [
+    ['Code',row.code], ['Paragraphes',row.articles], ['Pages du PDF',row.pages],
+    ['Repère',row.ref], ['Famille',row.family], ['Support',row.support]
+  ].filter(([,value]) => value);
+  const id=e(row.id);
+  return `<tr class="ws-detail" id="ws-detail-${id}"><td colspan="3">
+    <div class="ws-detail-body">
+      <p class="ws-description">${e(row.description)}</p>
+      <dl class="ws-references">${references.map(([label,value]) => `<div><dt>${label}</dt><dd>${e(value)}</dd></div>`).join('')}</dl>
+      <div class="ws-followup"><div><strong>Commentaire</strong><p class="ws-comment">${row.comment?e(row.comment):'Aucun commentaire.'}</p></div>
+      ${archived?'':`<button type="button" class="button small" data-action="worksheet-edit" data-id="${id}" aria-label="Modifier le suivi de ${e(row.subject)}">Modifier le suivi</button>`}</div>
+    </div></td></tr>`;
+}
+
+function decisionCell(label,value) {
+  return value
+    ? `<td class="ws-choice"><span class="ws-mobile-label" aria-hidden="true">${label} · </span>${e(value)}</td>`
+    : `<td class="ws-choice ws-unset"><span aria-hidden="true">—</span><span class="sr-only">Non renseigné</span></td>`;
+}
+
+function rowsMarkup(rows,expandedId,archived) {
+  return rows.map(row => {
+    const id=e(row.id);
+    const expanded=String(row.id)===expandedId;
+    return `<tr class="ws-summary${expanded?' ws-selected':''}" data-action="worksheet-toggle" data-id="${id}">
+      <td><button type="button" class="ws-toggle" id="ws-toggle-${id}" aria-expanded="${expanded}"${expanded?` aria-controls="ws-detail-${id}"`:''}><span class="ws-chevron" aria-hidden="true"></span>${e(row.subject)}</button></td>
+      ${decisionCell('Priorité',row.priority)}${decisionCell('Statut',row.status)}
+    </tr>${expanded?detailMarkup(row,archived):''}`;
+  }).join('');
 }
 
 export function worksheetMarkup(sheet,filters,archived=false) {
@@ -50,6 +71,6 @@ export function worksheetMarkup(sheet,filters,archived=false) {
     ${filterSelect('priority','Priorité','Toutes les priorités',sheet.priorities,filters.priority)}
     ${filterSelect('status','Statut','Tous les statuts',sheet.statuses,filters.status)}</div>
     <p class="ws-count" role="status">${rows.length?`${offset+1} à ${Math.min(offset+pageSize,rows.length)} sur ${rows.length} option${rows.length>1?'s':''}`:'Aucune option pour ces filtres.'}</p>
-    ${rows.length?`<table class="ws-table" aria-labelledby="worksheet-title"><thead><tr><th scope="col">Feuille de calcul</th><th scope="col">Code et paragraphes</th><th scope="col">Mon suivi</th></tr></thead><tbody>${rowsMarkup(rows.slice(offset,offset+pageSize),archived)}</tbody></table>`:''}
+    ${rows.length?`<table class="ws-table" aria-labelledby="worksheet-title"><thead><tr><th scope="col">Feuille de calcul</th><th scope="col">Priorité</th><th scope="col">Statut</th></tr></thead><tbody>${rowsMarkup(rows.slice(offset,offset+pageSize),filters.expandedId,archived)}</tbody></table>`:''}
     ${pages>1?`<nav class="ws-pager" aria-label="Pages du tableau"><button class="button small" data-action="worksheet-page" data-page="${page-1}" ${page===1?'disabled':''}>Précédente</button><span>Page ${page} sur ${pages}</span><button class="button small" data-action="worksheet-page" data-page="${page+1}" ${page===pages?'disabled':''}>Suivante</button></nav>`:''}`;
 }
