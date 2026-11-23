@@ -20,7 +20,7 @@ test('legacy migration preserves catalogue IDs, revision, account and sessions a
     INSERT INTO sessions VALUES ('test-session','version','test-csrf',9999999999);`);
   old.close();let DB=database(path);
   let p=DB.sql.prepare('SELECT * FROM projects').get();assert.equal(p.id,'legacy');assert.equal(p.revision,7);assert.equal(p.description,'Notes legacy description');assert.equal(p.url,'https://private.example/');assert.equal(p.notes,'');assert.equal(p.status,'À qualifier');assert.equal(p.archived,0);assert.equal(p.access_status,'unknown');
-  assert.equal(DB.sql.prepare('PRAGMA user_version').get().user_version,2);assert.equal(DB.sql.prepare('PRAGMA foreign_keys').get().foreign_keys,1);
+  assert.equal(DB.sql.prepare('PRAGMA user_version').get().user_version,3);assert.equal(DB.sql.prepare('PRAGMA foreign_keys').get().foreign_keys,1);
   assert.equal(DB.sql.prepare('SELECT password FROM account').get().password,'test-hash-not-a-secret');assert.equal(DB.sql.prepare('SELECT count(*) AS n FROM sessions').get().n,1);
   DB.sql.prepare('UPDATE projects SET notes=?,status=?').run('After migration','En cours');DB.sql.close();DB=database(path);
   p=DB.sql.prepare('SELECT * FROM projects').get();assert.equal(p.notes,'After migration');assert.equal(p.status,'En cours');assert.equal(p.revision,7);DB.sql.close();
@@ -46,12 +46,31 @@ test('version 1 catalogue gains private worksheets while retaining existing proj
     VALUES ('example','Projet existant','','','',9,123,'En pause','Note existante');`);
   original.sql.close();
   const migrated=database(path);
-  assert.equal(migrated.sql.prepare('PRAGMA user_version').get().user_version,2);
+  assert.equal(migrated.sql.prepare('PRAGMA user_version').get().user_version,3);
   assert.deepEqual({...migrated.sql.prepare('SELECT revision,status,notes FROM projects WHERE id=?').get('example')},
     {revision:9,status:'En pause',notes:'Note existante'});
   assert.equal(migrated.sql.prepare('SELECT count(*) AS n FROM project_worksheets').get().n,0);
   assert.throws(()=>migrated.sql.prepare('INSERT INTO project_worksheets VALUES (?,?,?)').run('missing','Tableau fictif',Buffer.from('test')),/FOREIGN KEY/);
   migrated.sql.close();
+});
+
+test('version 2 rows retain priorities, statuses, comments and revisions when decisions are added',t=>{
+  const path=join(directory(t),'worksheet-v2.sqlite');
+  const original=database(path);
+  original.sql.exec(`ALTER TABLE worksheet_rows DROP COLUMN decision; PRAGMA user_version=2;
+    INSERT INTO projects(id,name,description,url,source,updated_at) VALUES('example','Exemple','','','',1);
+    INSERT INTO project_worksheets VALUES('example','Tableau',X'1234');
+    INSERT INTO worksheet_rows(project_id,id,ref,subject,description,code,articles,family,pages,support,priority,status,comment,revision)
+      VALUES('example',4,'A','Objet','','','','','','','Non prioritaire','En attente','À revoir',7);`);
+  original.sql.close();
+  const migrated=database(path);
+  assert.deepEqual({...migrated.sql.prepare('SELECT priority,status,comment,decision,revision FROM worksheet_rows').get()},
+    {priority:'Non prioritaire',status:'En attente',comment:'À revoir',decision:'',revision:7});
+  migrated.sql.prepare('UPDATE worksheet_rows SET decision=?').run('Retenir sous réserve de revue');
+  migrated.sql.close();
+  const reopened=database(path);
+  assert.equal(reopened.sql.prepare('SELECT decision FROM worksheet_rows').get().decision,'Retenir sous réserve de revue');
+  reopened.sql.close();
 });
 
 test('private data and authentication survive reopen and a real SQLite backup can be restored',async t=>{

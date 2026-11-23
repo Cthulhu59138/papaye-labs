@@ -3,11 +3,11 @@ import {fileURLToPath} from 'node:url';
 
 const writer = fileURLToPath(new URL('./export-worksheet.py', import.meta.url));
 
-export function exportWorksheet(templateBytes, rows) {
-  const overrides = rows.map(({id, priority, status, comment}) => [id, priority, status, comment]);
+export function exportWorksheet(templateBytes, rows, decisions) {
+  const overrides = rows.map(({id, priority, status, comment, decision}) => [id, priority, status, comment, decision]);
   const payload = JSON.stringify({
     template: Buffer.from(templateBytes).toString('base64'),
-    rows: overrides,
+    rows: overrides, decisions,
   });
   return new Promise((resolve, reject) => {
     const child = execFile('python3', ['-I', writer], {

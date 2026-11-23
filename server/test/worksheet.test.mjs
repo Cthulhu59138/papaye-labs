@@ -8,7 +8,17 @@ function testWorkbook() {
 import io, sys, zipfile
 out = io.BytesIO()
 with zipfile.ZipFile(out, "w") as z:
-    z.writestr("xl/worksheets/sheet1.xml", '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="4"><c r="B4"/><c r="C4"/><c r="D4"/></row></sheetData></worksheet>')
+    ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    rels = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    z.writestr("xl/worksheets/sheet1.xml", f'''<worksheet xmlns="{ns}" xmlns:r="{rels}"><dimension ref="A1:E4"/>
+      <cols><col min="1" max="5" width="17" customWidth="1"/></cols><sheetData>
+      <row r="3"><c r="C3" s="1"/></row><row r="4"><c r="B4"/><c r="C4" s="2"/><c r="D4"/><c r="E4"><f>HYPERLINK("fiche.txt","Fiche")</f></c></row>
+      </sheetData><dataValidations count="1"><dataValidation type="list" sqref="C4:C4" showErrorMessage="1"><formula1>"Oui,Non"</formula1></dataValidation></dataValidations>
+      <tableParts count="1"><tablePart r:id="r1"/></tableParts></worksheet>''')
+    columns = ''.join(f'<tableColumn id="{i}" name="{name}"/>' for i,name in enumerate(["Objet","Priorité","Statut","Commentaire","Fiche"],1))
+    z.writestr("xl/tables/table1.xml", f'<table xmlns="{ns}" ref="A3:E4"><autoFilter ref="A3:E4"/><tableColumns count="5">{columns}</tableColumns><tableStyleInfo name="TableStyleLight1"/></table>')
+    z.writestr("xl/worksheets/_rels/sheet1.xml.rels", f'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="r1" Type="{rels}/table" Target="../tables/table1.xml"/></Relationships>')
+    z.writestr("custom/template.bin",b"opaque template metadata")
 sys.stdout.buffer.write(out.getvalue())
 `]);
 }
@@ -45,17 +55,33 @@ test('private worksheet reads, saves, exports and guards against conflicting edi
   assert.equal(table.rows.length,1);
   assert.deepEqual(table.rows[0],{
     id:4,ref:'Démo 1',subject:'Surface',description:'Calculer une surface',code:'Exemple',
-    articles:'A',family:'Carrés',pages:'1',support:'Fiche fictive',priority:'',status:'',comment:'',revision:1
+    articles:'A',family:'Carrés',pages:'1',support:'Fiche fictive',priority:'',status:'',comment:'',decision:'',revision:1
   });
   assert.deepEqual(table.priorities,['1 – Haute','2 – Moyenne','3 – Basse','Non prioritaire']);
   assert.deepEqual(table.statuses,['Finalisé','En cours','À développer','En attente','Annulé','Autre']);
-  for (const invalid of [{priority:'Haute'},{status:'inconnu'},{revision:0},{comment:'a'.repeat(8001)},{subject:'Autre objet'}]) {
+  assert.deepEqual(table.decisions,['Retenir','Reporter','Écarter']);
+  for (const invalid of [{priority:'Haute'},{status:'inconnu'},{revision:0},{comment:'a'.repeat(8001)},{subject:'Autre objet'},
+    {decision:400},{decision:null},{decision:'x'.repeat(401)},{decision:'\udfff'}]) {
     assert.equal((await patch(rowUrl,invalid)).status,400);
   }
+  const partial=data=>x.call(rowUrl,{...owner,method:'PATCH',data});
+  assert.equal((await partial({revision:1})).status,400);
+  assert.equal((await partial({decision:'Retenir'})).status,400);
   const saved=await patch(rowUrl);
   assert.equal(saved.status,200);
-  const {row}=await saved.json();
-  assert.equal(row.revision,2);
+  const {row:legacyRow}=await saved.json();
+  assert.equal(legacyRow.revision,2);
+  assert.equal(legacyRow.decision,'');
+  const decision='Retenir sous réserve d’une seconde mesure';
+  const decided=await partial({revision:2,decision});
+  assert.equal(decided.status,200);
+  const {row:decisionRow}=await decided.json();
+  assert.deepEqual(decisionRow,{...legacyRow,decision,revision:3});
+  assert.equal((await partial({revision:2,status:'Annulé'})).status,409);
+  // A client still sending the original three fields must preserve the new one.
+  const {row}=await (await patch(rowUrl,{revision:3,comment:'  Commentaire libre\n=SUM(1,2)  '})).json();
+  assert.equal(row.decision,decision);
+  assert.equal(row.revision,4);
   assert.equal((await patch(rowUrl,{comment:'saisie périmée'})).status,409);
   assert.deepEqual((await (await x.call(url,owner)).json()).rows[0],row);
   const download=await x.call(url+'/download',owner);
@@ -68,15 +94,38 @@ import io,json,sys,zipfile
 from xml.etree import ElementTree as ET
 with zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())) as z:
     sheet = ET.fromstring(z.read("xl/worksheets/sheet1.xml"))
-    print(json.dumps([cell.findtext("{*}is/{*}t") for cell in sheet.iterfind(".//{*}c")]))
+    assert z.read("custom/template.bin") == b"opaque template metadata"
+    table=ET.fromstring(z.read("xl/tables/table1.xml"))
+    assert table.get("ref") == table.find("{*}autoFilter").get("ref") == "A3:F4"
+    assert [c.get("name") for c in table.findall("{*}tableColumns/{*}tableColumn")][-1] == "Décision"
+    assert table.find("{*}tableColumns").get("count") == "6"
+    assert sheet.find("{*}dimension").get("ref") == "A1:F4"
+    cells={c.get("r"):c for c in sheet.iterfind(".//{*}c")}
+    assert cells["E4"].findtext("{*}f") == 'HYPERLINK("fiche.txt","Fiche")'
+    assert cells["F3"].findtext("{*}is/{*}t") == "Décision"
+    assert cells["F4"].get("s") == cells["C4"].get("s")
+    validations=sheet.find("{*}dataValidations")
+    old,new=validations.findall("{*}dataValidation")
+    assert old.get("sqref") == "C4:C4" and old.findtext("{*}formula1") == '"Oui,Non"'
+    assert validations.get("count") == "2"
+    assert new.get("sqref") == "F4:F4" and new.get("showErrorMessage") == "0"
+    assert new.findtext("{*}formula1") == '"Retenir,Reporter,Écarter"'
+    print(json.dumps([cells[c+"4"].findtext("{*}is/{*}t") for c in "BCDF"]))
 `],{input:Buffer.from(await download.arrayBuffer()),encoding:'utf8'});
-  assert.deepEqual(JSON.parse(exported),[row.priority,row.status,row.comment]);
+  assert.deepEqual(JSON.parse(exported),[row.priority,row.status,row.comment,decision]);
   const archive=await x.call(projectUrl,{...owner,method:'PATCH',data:{revision:1,archived:true}});
   assert.equal(archive.status,200);
-  assert.equal((await patch(rowUrl,{revision:2})).status,409);
+  assert.equal((await partial({revision:4,decision:'Reporter'})).status,409);
   assert.deepEqual((await (await x.call(url,owner)).json()).rows[0],row);
   await x.call(projectUrl,{...owner,method:'PATCH',data:{revision:2,archived:false}});
-  const cleared=await patch(rowUrl,{revision:2,priority:'',status:'',comment:''});
+  const {row:clearedDecision}=await (await partial({revision:4,decision:''})).json();
+  assert.deepEqual(clearedDecision,{...row,revision:5,decision:''});
+  const cleared=await patch(rowUrl,{revision:5,priority:'',status:'',comment:''});
   assert.equal(cleared.status,200);
   assert.equal((await cleared.json()).row.comment,'');
+  const limitDecision='é'.repeat(400);
+  const multi=await partial({revision:6,decision:limitDecision,status:'En cours'});
+  assert.equal(multi.status,200);
+  const {row:multiRow}=await multi.json();
+  assert.deepEqual([multiRow.priority,multiRow.status,multiRow.comment,multiRow.decision],['','En cours','',limitDecision]);
 });

@@ -1,76 +1,85 @@
 import {escape as e} from './dashboard-model.mjs';
 
-const pageSize = 12;
-export const worksheetFilters = () => ({query:'',code:'',priority:'',status:'',page:1,expandedId:null});
+const pageSize=12;
+export const worksheetFilters=()=>({query:'',code:'',priority:'',status:'',decision:'',page:1,expandedId:null});
+const fields=[['status','Statut','statuses'],['decision','Décision','decisions'],['priority','Priorité','priorities']];
 
 export function filterWorksheet(rows,filters) {
-  const needle = filters.query.trim().toLocaleLowerCase('fr');
-  return rows.filter(row => (!filters.code || row.code === filters.code)
-    && (!filters.priority || row.priority === filters.priority)
-    && (!filters.status || row.status === filters.status)
-    && (!needle || [row.subject,row.description,row.ref,row.articles,row.family,row.comment].join(' ').toLocaleLowerCase('fr').includes(needle)));
+  const needle=filters.query.trim().toLocaleLowerCase('fr');
+  return rows.filter(row=>(!filters.code || row.code===filters.code)
+    && fields.every(([field])=>!filters[field] || row[field]===filters[field])
+    && (!needle || [row.subject,row.description,row.ref,row.articles,row.family,row.decision,row.comment].join(' ').toLocaleLowerCase('fr').includes(needle)));
 }
-
+export function worksheetPage(rows,filters) {
+  const matches=filterWorksheet(rows,filters),pages=Math.max(1,Math.ceil(matches.length/pageSize));
+  const page=Math.min(pages,Math.max(1,filters.page)),offset=(page-1)*pageSize;
+  return {items:matches.slice(offset,offset+pageSize),page,pages,offset,total:matches.length};
+}
 function options(values,selected) {
-  return values.filter(Boolean).map(value =>
+  return (values||[]).filter(Boolean).map(value=>
     `<option value="${e(value)}"${selected===value?' selected':''}>${e(value)}</option>`).join('');
 }
 function filterSelect(key,label,blank,values,selected) {
   return `<label for="worksheet-${key}">${label}<select id="worksheet-${key}" data-worksheet-filter="${key}"><option value="">${blank}</option>${options(values,selected)}</select></label>`;
 }
-export function worksheetEditor(row,sheet,values=row) {
-  return `<h3>${e(row.subject)}</h3><p>${e(row.description)}</p>
-    <p><strong>${e(row.code)}</strong> · ${e(row.articles)}${row.pages?' · p. '+e(row.pages):''}</p>
-    <div class="form-grid"><div><label for="worksheet-edit-priority">Priorité</label><select id="worksheet-edit-priority" name="priority"><option value="">Non renseignée</option>${options(sheet.priorities,values.priority)}</select></div>
-    <div><label for="worksheet-edit-status">Statut</label><select id="worksheet-edit-status" name="status"><option value="">Non renseigné</option>${options(sheet.statuses,values.status)}</select></div></div>
-    <label for="worksheet-edit-comment">Commentaire libre</label><textarea id="worksheet-edit-comment" name="comment" rows="4" maxlength="8000">${e(values.comment)}</textarea>`;
-}
-
-function detailMarkup(row,archived) {
-  const references = [
-    ['Code',row.code], ['Paragraphes',row.articles], ['Pages du PDF',row.pages],
-    ['Repère',row.ref], ['Famille',row.family], ['Support',row.support]
-  ].filter(([,value]) => value);
+function detailMarkup(row,archived,values) {
+  const references=[['Pages du PDF',row.pages],['Repère',row.ref],['Famille',row.family],['Support',row.support]].filter(([,value])=>value);
   const id=e(row.id);
-  return `<tr class="ws-detail" id="ws-detail-${id}"><td colspan="3">
-    <div class="ws-detail-body">
-      <p class="ws-description">${e(row.description)}</p>
-      <dl class="ws-references">${references.map(([label,value]) => `<div><dt>${label}</dt><dd>${e(value)}</dd></div>`).join('')}</dl>
-      <div class="ws-followup"><div><strong>Commentaire</strong><p class="ws-comment">${row.comment?e(row.comment):'Aucun commentaire.'}</p></div>
-      ${archived?'':`<button type="button" class="button small" data-action="worksheet-edit" data-id="${id}" aria-label="Modifier le suivi de ${e(row.subject)}">Modifier le suivi</button>`}</div>
+  return `<tr class="ws-detail" id="ws-detail-${id}"><td colspan="6"><div class="ws-detail-body">
+    <p class="ws-description">${e(row.description)}</p>
+    <dl class="ws-references">${references.map(([label,value])=>`<div><dt>${label}</dt><dd>${e(value)}</dd></div>`).join('')}</dl>
+    <label for="ws-comment-${id}">Commentaire libre</label>
+    ${archived?`<p id="ws-comment-${id}" class="ws-comment">${e(row.comment)||'Aucun commentaire.'}</p>`:`<textarea id="ws-comment-${id}" rows="2" maxlength="8000" data-row="${id}" data-ws-field="comment">${e(values.comment??row.comment)}</textarea>`}
     </div></td></tr>`;
 }
-
-function decisionCell(label,value) {
-  return value
-    ? `<td class="ws-choice"><span class="ws-mobile-label" aria-hidden="true">${label} · </span>${e(value)}</td>`
-    : `<td class="ws-choice ws-unset"><span aria-hidden="true">—</span><span class="sr-only">Non renseigné</span></td>`;
+export function worksheetFeedback(row,entry) {
+  if(!entry) return '';
+  const id=e(row.id);
+  if(!entry.error || entry.busy) return '';
+  const labels={status:'Statut',decision:'Décision',priority:'Priorité',comment:'Commentaire'};
+  const comparison=entry.conflict && entry.reviewed
+    ? `<div>Valeurs déjà enregistrées : ${Object.keys(entry.values).map(f=>e(labels[f])+' · '+(e(row[f])||'—')).join(' / ')}</div>`:'';
+  const label=entry.conflict?(entry.reviewed?'Appliquer ma saisie':'Relire la ligne'):'Réessayer';
+  return `<div role="alert">${e(entry.error)}</div>${comparison}<button class="button small" type="button" id="ws-retry-${id}" data-action="worksheet-save-retry" data-id="${id}">${label}</button>
+    ${!entry.conflict||entry.reviewed?`<button type="button" class="button text small" data-action="worksheet-discard" data-id="${id}">Écarter ma saisie</button>`:''}`;
 }
-
-function rowsMarkup(rows,expandedId,archived) {
-  return rows.map(row => {
-    const id=e(row.id);
-    const expanded=String(row.id)===expandedId;
-    return `<tr class="ws-summary${expanded?' ws-selected':''}" data-action="worksheet-toggle" data-id="${id}">
-      <td><button type="button" class="ws-toggle" id="ws-toggle-${id}" aria-expanded="${expanded}"${expanded?` aria-controls="ws-detail-${id}"`:''}><span class="ws-chevron" aria-hidden="true"></span>${e(row.subject)}</button></td>
-      ${decisionCell('Priorité',row.priority)}${decisionCell('Statut',row.status)}
-    </tr>${expanded?detailMarkup(row,archived):''}`;
+function rowsMarkup(rows,sheet,filters,archived,edits) {
+  return rows.map(row=>{
+    const id=e(row.id), expanded=String(row.id)===filters.expandedId, entry=edits.get(row.id), values=entry?.values??{};
+    const toggle=`data-action="worksheet-toggle" data-id="${id}" aria-expanded="${expanded}"${expanded?` aria-controls="ws-detail-${id}"`:''}`;
+    return `<tr class="ws-summary${expanded?' ws-selected':''}" data-ws-row="${id}">
+      <th scope="row"><button class="ws-toggle ws-subject" id="ws-toggle-${id}" ${toggle}>${e(row.subject)}</button>
+      <div class="ws-feedback" id="ws-feedback-${id}" aria-live="polite">${worksheetFeedback(row,entry)}</div></th>
+      <td class="ws-disclosure"><button type="button" class="ws-toggle ws-detail-toggle" id="ws-chevron-${id}" ${toggle} aria-label="${expanded?'Replier':'Déplier'} les détails de ${e(row.subject)}"><span class="ws-chevron" aria-hidden="true"></span></button></td>
+      <td class="ws-citation"><strong>${e(row.code)}</strong><span>${e(row.articles)}</span></td>
+      ${fields.map(([field,label,list])=>{
+        const value=values[field]??row[field]??'';
+        return `<td class="ws-choice"><span class="ws-mobile-label" aria-hidden="true">${label}</span>${archived?e(value)||'—':field==='decision'?`<input type="text" list="ws-decision-suggestions" maxlength="400" autocomplete="off" id="ws-decision-${id}" data-row="${id}" data-ws-field="decision" aria-label="Décision pour ${e(row.subject)}" value="${e(value)}">`:`<select id="ws-${field}-${id}" data-row="${id}" data-ws-field="${field}" aria-label="${label} pour ${e(row.subject)}"><option value="">—</option>${options(sheet[list],value)}</select>`}</td>`;
+      }).join('')}</tr>${expanded?detailMarkup(row,archived,values):''}`;
   }).join('');
 }
-
-export function worksheetMarkup(sheet,filters,archived=false) {
-  const rows=filterWorksheet(sheet.rows,filters);
-  const pages=Math.max(1,Math.ceil(rows.length/pageSize));
-  const page=Math.min(pages,Math.max(1,filters.page));
-  const offset=(page-1)*pageSize;
+export function worksheetRecovery(rows,edits,visibleIds) {
+  return [...edits.values()].filter(entry=>entry.error && !visibleIds.has(entry.id)).map(entry=>{
+    const row=rows.find(item=>item.id===entry.id);
+    return row?`<button type="button" class="button small" data-action="worksheet-find-draft" data-id="${e(row.id)}">Reprendre la saisie · ${e(row.subject)}</button>`:'';
+  }).join('');
+}
+export function worksheetMarkup(sheet,filters,archived=false,edits=new Map()) {
+  const {items,total,pages,page,offset}=worksheetPage(sheet.rows,filters);
+  const decisions=[...new Set([...(sheet.decisions||[]),...sheet.rows.map(row=>row.decision),filters.decision].filter(Boolean))];
   const codes=[...new Set(sheet.rows.map(row=>row.code))].sort((a,b)=>a.localeCompare(b,'fr'));
   return `<div class="ws-heading"><h2 id="worksheet-title">${e(sheet.title)}</h2>
     <button class="button" data-action="worksheet-download">Télécharger le classeur Excel</button></div>
-    <div class="ws-filters"><label for="worksheet-query">Rechercher<input id="worksheet-query" data-worksheet-filter="query" type="search" value="${e(filters.query)}" placeholder="Objet, paragraphe, repère…"></label>
+    <div class="ws-filters"><label for="worksheet-query">Rechercher<input id="worksheet-query" data-worksheet-filter="query" type="search" value="${e(filters.query)}" placeholder="Sujet, paragraphe, repère…"></label>
     ${filterSelect('code','Code','Tous les codes',codes,filters.code)}
-    ${filterSelect('priority','Priorité','Toutes les priorités',sheet.priorities,filters.priority)}
-    ${filterSelect('status','Statut','Tous les statuts',sheet.statuses,filters.status)}</div>
-    <p class="ws-count" role="status">${rows.length?`${offset+1} à ${Math.min(offset+pageSize,rows.length)} sur ${rows.length} option${rows.length>1?'s':''}`:'Aucune option pour ces filtres.'}</p>
-    ${rows.length?`<table class="ws-table" aria-labelledby="worksheet-title"><thead><tr><th scope="col">Feuille de calcul</th><th scope="col">Priorité</th><th scope="col">Statut</th></tr></thead><tbody>${rowsMarkup(rows.slice(offset,offset+pageSize),filters.expandedId,archived)}</tbody></table>`:''}
-    ${pages>1?`<nav class="ws-pager" aria-label="Pages du tableau"><button class="button small" data-action="worksheet-page" data-page="${page-1}" ${page===1?'disabled':''}>Précédente</button><span>Page ${page} sur ${pages}</span><button class="button small" data-action="worksheet-page" data-page="${page+1}" ${page===pages?'disabled':''}>Suivante</button></nav>`:''}`;
+    ${filterSelect('status','Statut','Tous les statuts',sheet.statuses,filters.status)}
+    ${filterSelect('decision','Décision','Toutes les décisions',decisions,filters.decision)}
+    ${filterSelect('priority','Priorité','Toutes les priorités',sheet.priorities,filters.priority)}</div>
+    <div class="ws-countbar"><p class="ws-count" id="ws-count" role="status">${worksheetCount(offset,items.length,total)}</p><span id="ws-save-status" role="status"></span></div>
+    <datalist id="ws-decision-suggestions">${options(sheet.decisions,undefined)}</datalist>
+    <div id="ws-recovery">${worksheetRecovery(sheet.rows,edits,new Set(items.map(r=>r.id)))}</div>
+    ${items.length?`<div class="ws-table-wrap"><table class="ws-table" aria-labelledby="worksheet-title"><thead><tr>${['Sujet','Détails','Code et paragraphe','Statut','Décision','Priorité'].map(label=>`<th scope="col">${label}</th>`).join('')}</tr></thead><tbody>${rowsMarkup(items,sheet,filters,archived,edits)}</tbody></table></div>`:''}
+    ${pages>1?`<nav class="ws-pager" data-pages="${pages}" aria-label="Pages du tableau"><button class="button small" data-action="worksheet-page" data-page="${page-1}" ${page===1?'disabled':''}>Précédente</button><span>Page ${page} sur ${pages}</span><button class="button small" data-action="worksheet-page" data-page="${page+1}" ${page===pages?'disabled':''}>Suivante</button></nav>`:''}`;
 }
+export const worksheetCount=(offset,length,total)=>total?`${offset+1} à ${offset+length} sur ${total} option${total>1?'s':''}`:'Aucune option pour ces filtres.';
+export const pageForIndex=index=>1+Math.floor(Math.max(index,0)/pageSize);
