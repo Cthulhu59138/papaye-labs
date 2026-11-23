@@ -1,7 +1,8 @@
 import {PROJECT_STATUSES,TASK_STATUSES,ACCESS_LABELS,SESSION_KEY,LOGOUT_KEY,escape as e,safeHref,parisDay,dateLabel,dueLabel,projectProgress,activeTasks,sortTasks,filterProjects,filterTasks,parseSession,canShare,validateProject,validateTask} from './dashboard-model.mjs';
 import {setFormBusy,readFormValues} from './dashboard-forms.mjs';
 import {createConfirmation} from './dashboard-confirm.mjs';
-import {worksheetFilters,worksheetMarkup,worksheetEditor} from './dashboard-worksheet.mjs';
+import {worksheetFilters,worksheetMarkup,worksheetPage,worksheetFeedback,worksheetRecovery,worksheetCount,pageForIndex} from './dashboard-worksheet.mjs?v=3';
+import {createWorksheetEdits} from './dashboard-worksheet-edits.mjs';
 
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#editor');
@@ -21,6 +22,24 @@ if (initialProject && /^[a-z0-9-]+$/.test(initialProject)) {
   state.selected = initialProject;
 }
 let worksheet = null;
+const sheetEdits=createWorksheetEdits({
+  canWrite:()=>state.authenticated,
+  write:async(project,id,body)=>(await api(worksheetPath(project)+'/rows/'+encodeURIComponent(id),{method:'PATCH',body})).row,
+  read:async(project,id)=>{
+    const result=await api(worksheetPath(project));
+    const row=result.rows.find(item=>item.id===id);
+    if (!row) throw new ApiError('La ligne ne figure plus dans le tableau.');
+    return row;
+  },
+  accept:(project,row)=>{
+    if(worksheet?.id!==project)return;
+    if(!worksheet.data) {worksheet.updates.set(row.id,row);return;}
+    const index=worksheet.data.rows.findIndex(r=>r.id===row.id);
+    if(index>=0 && worksheet.data.rows[index].revision<=row.revision)worksheet.data.rows[index]=row;
+  },
+  changed:syncWorksheetRow,
+  saved:project=>{if(worksheet?.id===project)worksheet.didSave=true;},
+});
 let sheetFilters = worksheetFilters();
 let returnFocus = null;
 let toastTimer;
@@ -59,7 +78,7 @@ function hideEditor() {
   dialog.replaceChildren();state.editor = null;
 }
 function captureDraft() {
-  if (state.editor?.dirty && ['project','task','worksheet'].includes(state.editor.kind)) {
+  if (state.editor?.dirty && ['project','task'].includes(state.editor.kind)) {
     const form = dialog.querySelector('form');
     if (form) state.pendingDraft = {...state.editor,values:readFormValues(form),dirty:true};
   }
@@ -68,6 +87,7 @@ function purgePrivate({keepDraft=false}={}) {
   if (keepDraft) captureDraft(); else state.pendingDraft = null;
   confirmation.cancel();
   worksheet = null;
+  sheetEdits.pause(!keepDraft);
   if (!keepDraft) sheetFilters = worksheetFilters();
   state.epoch++;state.authenticated = false;state.projects=[];state.tasks=[];
   clearTimeout(state.expiryTimer);clearToast();hideEditor();app.replaceChildren();
@@ -113,7 +133,7 @@ function renderLogin() {
     <section class="login-card" aria-labelledby="login-title"><span class="small-tag">${setup ? 'PREMIÈRE CONNEXION' : 'BIENVENUE'}</span><h2 id="login-title">${setup ? 'Créer ton compte Papaye' : 'Ouvrir mon espace'}</h2><p class="muted">${setup ? 'Choisis ton identifiant et une phrase de passe personnelle.' : 'Connecte-toi avec ton compte Papaye.'}</p>
     ${state.loginError ? `<div class="notice error" role="alert">${e(state.loginError)}</div>` : ''}
     ${!state.configured && !setup ? '<div class="notice">Ton compte doit être activé avec ton lien personnel avant la première connexion.</div>' : ''}
-    ${state.pendingDraft ? '<p class="draft-note">Ton brouillon est conservé dans cet onglet jusqu’à ta reconnexion.</p>' : ''}
+    ${(state.pendingDraft || sheetEdits.list().length) ? '<p class="draft-note">Ton brouillon est conservé dans cet onglet jusqu’à ta reconnexion.</p>' : ''}
     <form id="login-form" data-form="login"><label for="login-name">Identifiant</label><input id="login-name" name="login" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="40" required${disabled ? ' disabled' : ''}>
     <label for="login-password">${setup ? 'Phrase de passe' : 'Mot de passe'}</label><input id="login-password" name="password" type="password" autocomplete="${setup ? 'new-password' : 'current-password'}" ${setup ? 'minlength="12"' : ''} maxlength="256" required${disabled ? ' disabled' : ''}>
     ${setup ? '<p class="field-hint">Au moins 12 caractères. Une courte phrase convient.</p><label for="login-confirm">Confirmer la phrase de passe</label><input id="login-confirm" name="confirmation" type="password" autocomplete="new-password" minlength="12" maxlength="256" required>' : ''}
@@ -214,13 +234,30 @@ function mayRenderSheet(current) {
 }
 async function fetchWorksheet(projectId,force=false) {
   if (!force && worksheet?.id===projectId) return worksheet.loading;
-  const current = {id:projectId,data:null,error:'',loading:null};
+  const current = {id:projectId,data:null,error:'',loading:null,updates:new Map()};
   worksheet = current;
   current.loading = api(worksheetPath(projectId)).then(result=>{
     if (!Array.isArray(result.rows)||!Array.isArray(result.priorities)||!Array.isArray(result.statuses)) throw new ApiError('Le tableau reçu est incomplet.');
     current.data=result;
+    for(const [index,row] of result.rows.entries()) {
+      const updated=current.updates.get(row.id);
+      if(updated && updated.revision>row.revision)result.rows[index]=updated;
+    }
+    current.updates.clear();
+    if(mayRenderSheet(current))sheetEdits.resume(projectId);
   }).catch(error=>{current.error=error.message;});
   return current.loading;
+}
+function updateWorksheetProgress() {
+  const status=document.getElementById('ws-save-status');
+  if(!status || !worksheet)return;
+  const drafts=sheetEdits.list(worksheet.id);
+  let text='';
+  if(drafts.some(d=>d.busy))text='Enregistrement…';
+  else if(drafts.some(d=>d.error))text='Saisie à reprendre';
+  else if(drafts.length)text='Saisie en attente…';
+  else if(worksheet.didSave)text='Modifications enregistrées.';
+  if(status.textContent!==text)status.textContent=text;
 }
 function drawWorksheet() {
   const panel=document.getElementById('project-worksheet');
@@ -228,8 +265,56 @@ function drawWorksheet() {
   if (worksheet.error) {
     panel.innerHTML=`<div role="alert">${e(worksheet.error)}</div><button class="button" data-action="worksheet-retry">Réessayer</button>`;
   } else if (worksheet.data) {
-    panel.innerHTML=worksheetMarkup(worksheet.data,sheetFilters,projectById(worksheet.id)?.archived);
+    const active=panel.contains(document.activeElement)?document.activeElement:null;
+    const edits=sheetEdits.list(worksheet.id);
+    panel.innerHTML=worksheetMarkup(worksheet.data,sheetFilters,projectById(worksheet.id)?.archived,new Map(edits.map(d=>[d.id,d])));
+    updateWorksheetProgress();
+    if(active?.id) {
+      const target=document.getElementById(active.id) || (active.dataset.wsField && panel.querySelector('[data-ws-field="'+active.dataset.wsField+'"]')) || document.getElementById('worksheet-query');
+      target?.focus({preventScroll:true});
+      if(typeof active.selectionStart==='number' && typeof target?.selectionStart==='number')target.setSelectionRange(active.selectionStart,active.selectionEnd);
+    }
   }
+}
+function syncWorksheetRow(project,id) {
+  if(!worksheet?.data || worksheet.id!==project || !mayRenderSheet(worksheet))return;
+  const panel=document.getElementById('project-worksheet');
+  if(!panel || !panel.querySelector('#ws-count'))return;
+  const {items,offset,total,pages}=worksheetPage(worksheet.data.rows,sheetFilters);
+  const visible=[...panel.querySelectorAll('[data-ws-row]')].map(tr=>Number(tr.dataset.wsRow));
+  const previousPages=Number(panel.querySelector('.ws-pager')?.dataset.pages)||1;
+  if(previousPages!==pages || visible.length!==items.length || items.some((row,i)=>row.id!==visible[i])) {
+    drawWorksheet();
+    return;
+  }
+  updateWorksheetProgress();
+  const row=currentSheetRow(id);
+  if(!row)return;
+  const entry=sheetEdits.get(project,id);
+  const feedback=document.getElementById('ws-feedback-'+id);
+  if(feedback) {
+    const html=worksheetFeedback(row,entry);
+    if(feedback.dataset.last!==html){
+      const focusInside=feedback.contains(document.activeElement);
+      feedback.innerHTML=html;feedback.dataset.last=html;
+      if(focusInside)(feedback.querySelector('button') || document.getElementById('ws-toggle-'+id))?.focus({preventScroll:true});
+    }
+    for(const control of panel.querySelectorAll('[data-row="'+id+'"][data-ws-field]')){
+      const field=control.dataset.wsField, value=entry?.values[field]??row[field]??'';
+      if(control.value!==value)control.value=value;
+    }
+  }
+  const decisionFilter=document.getElementById('worksheet-decision');
+  const expected=new Set([...(worksheet.data.decisions||[]),...worksheet.data.rows.map(r=>r.decision).filter(Boolean)]);
+  if(sheetFilters.decision)expected.add(sheetFilters.decision);
+  for(const option of [...decisionFilter.options])if(option.value && !expected.has(option.value))option.remove();
+  const actual=new Set([...decisionFilter.options].map(opt=>opt.value));
+  for(const option of expected)if(!actual.has(option))decisionFilter.add(new Option(option,option));
+  const count=document.getElementById('ws-count'),text=worksheetCount(offset,items.length,total);
+  if(count.textContent!==text)count.textContent=text;
+  const recovery=worksheetRecovery(worksheet.data.rows,new Map(sheetEdits.list(project).map(d=>[d.id,d])),new Set(visible));
+  const location=document.getElementById('ws-recovery');
+  if(location.dataset.last!==recovery){location.innerHTML=recovery;location.dataset.last=recovery;}
 }
 async function showWorksheet() {
   const id=state.selected;
@@ -239,6 +324,10 @@ async function showWorksheet() {
 async function downloadWorksheet(button) {
   const current=worksheet;
   if (!current || !mayRenderSheet(current)) return;
+  if(sheetEdits.list(current.id).length){
+    notify('Le classeur contient les choix enregistrés. Termine les saisies en attente avant de le télécharger.');
+    return;
+  }
   button.disabled=true;
   try {
     const blob=await api(worksheetPath(current.id)+'/download',{download:true});
@@ -322,13 +411,6 @@ function openEditor(kind,id=null,{projectId=null,values=null,revision=null,focus
     const projects=state.projects.filter(project=>!project.archived);
     body=`<label for="task-title">Prochaine action <span class="required">*</span></label><input id="task-title" name="title" maxlength="200" required value="${e(value.title)}" placeholder="Une action concrète…"><label for="task-project">Projet</label>${id?`<input name="projectId" type="hidden" value="${e(value.projectId)}"><p class="readonly-field">${e(projectById(value.projectId)?.name)}</p>`:`<select id="task-project" name="projectId" required>${projects.map(project=>`<option value="${e(project.id)}"${project.id===value.projectId?' selected':''}>${e(project.name)}</option>`).join('')}</select>`}<div class="form-grid"><div><label for="task-status">Statut</label><select id="task-status" name="status">${options(TASK_STATUSES,value.status)}</select></div><div><label for="task-due">Échéance <span class="optional">facultatif</span></label><input id="task-due" name="dueDate" type="date" value="${e(value.dueDate || '')}"></div></div>`;
     footer=`${id?'<button type="button" class="button text danger push-left" data-action="delete-task">Supprimer</button>':''}<button type="button" class="button" data-action="close-editor">Annuler</button><button type="submit" class="button primary">Enregistrer la tâche</button>`;
-  } else if(kind==='worksheet') {
-    const row=currentSheetRow(id);
-    if(!row || worksheet.id!==projectId || projectById(projectId)?.archived){state.editor=null;return;}
-    state.editor.revision=revision??row.revision;
-    title='Modifier le suivi';
-    body=worksheetEditor(row,worksheet.data,values||row);
-    footer='<button type="button" class="button" data-action="close-editor">Annuler</button><button type="submit" class="button primary">Enregistrer</button>';
   } else if(kind==='account') {
     title='Mon compte';
     body=`<p class="account-intro">Connecté avec <strong>${e(state.session.login)}</strong>.</p><h3>Changer mon mot de passe</h3><p class="field-hint">Ce changement déconnecte tes autres sessions.</p><label for="current-password">Mot de passe actuel</label><input id="current-password" type="password" name="currentPassword" autocomplete="current-password" maxlength="256" required><label for="new-password">Nouvelle phrase de passe</label><input id="new-password" type="password" name="password" autocomplete="new-password" minlength="12" maxlength="256" required><p class="field-hint">Au moins 12 caractères, sans symbole obligatoire.</p><label for="confirm-password">Confirmer</label><input id="confirm-password" type="password" name="confirmation" autocomplete="new-password" minlength="12" maxlength="256" required><label class="check-label"><input type="checkbox" name="remember"${state.remember?' checked':''}><span>Rester connecté pendant 30 jours</span></label>`;
@@ -370,10 +452,6 @@ async function saveEditor(form) {
       const result=await api(editor.id?`/api/tasks/${encodeURIComponent(editor.id)}`:`/api/projects/${encodeURIComponent(values.projectId)}/tasks`,{method:editor.id?'PATCH':'POST',body});
       if(epoch!==state.epoch)return;
       state.tasks=editor.id?state.tasks.map(task=>task.id===editor.id?result.task:task):[...state.tasks,result.task];
-    } else if(editor.kind==='worksheet') {
-      const result=await api(worksheetPath(editor.projectId)+'/rows/'+encodeURIComponent(editor.id),{method:'PATCH',body:{revision:editor.revision,priority:values.priority,status:values.status,comment:values.comment}});
-      if(epoch!==state.epoch || worksheet?.id!==editor.projectId)return;
-      worksheet.data.rows=worksheet.data.rows.map(row=>row.id===result.row.id?result.row:row);
     } else {
       const remember=values.remember==='on';
       const result=await api('/api/password',{method:'POST',body:{currentPassword:values.currentPassword,password:values.password,remember}});
@@ -383,13 +461,7 @@ async function saveEditor(form) {
     if(epoch!==state.epoch)return;
     state.editor.dirty=false;
     closeEditor({force:true});
-    if(editor.kind==='worksheet') {
-      drawWorksheet();
-      const target=document.getElementById('ws-toggle-'+editor.id) || document.getElementById('worksheet-query');
-      target?.focus({preventScroll:true});
-    } else {
-      renderPrivate({focus:true});
-    }
+    renderPrivate({focus:true});
     notify(editor.kind==='account'?'Mot de passe modifié. Les autres sessions sont déconnectées.':'C’est enregistré.');
   } catch(error) {
     if(epoch!==state.epoch)return;
@@ -405,13 +477,7 @@ async function reloadEditor() {
   if(!accepted||epoch!==state.epoch||state.editor!==editor||!form.isConnected)return;
   submitting(form,true,editorValues());
   try {
-    if(kind==='worksheet') {
-      await fetchWorksheet(projectId,true);
-      if(epoch!==state.epoch || state.editor!==editor)return;
-      if(worksheet?.error)throw new ApiError(worksheet.error);
-      if(!currentSheetRow(id))throw new ApiError('Cette option ne figure plus dans le tableau.');
-      openEditor(kind,id,{projectId});drawWorksheet();
-    } else if(await loadData(epoch)){
+    if(await loadData(epoch)){
       state.editor.dirty=false;openEditor(kind,id,{projectId});renderPrivate();
     }
   }
@@ -470,7 +536,7 @@ async function copyUrl() {
 }
 async function logout() {
   const epoch=state.epoch;
-  if(state.editor?.dirty||state.pendingDraft) {
+  if(state.editor?.dirty||state.pendingDraft||sheetEdits.list().length) {
     const accepted=await confirmation.request({title:'Te déconnecter ?',message:'Tes modifications non enregistrées seront abandonnées. Les données déjà enregistrées restent dans ton espace.',confirmLabel:'Abandonner et me déconnecter',destructive:true});
     if(!accepted||epoch!==state.epoch||!state.authenticated)return;
   }
@@ -503,7 +569,7 @@ async function handleAction(button) {
     case 'worksheet-toggle': {
       sheetFilters.expandedId=sheetFilters.expandedId===id?null:id;
       drawWorksheet();
-      const toggle=document.getElementById('ws-toggle-'+id);
+      const toggle=document.getElementById(button.id) || document.getElementById('ws-toggle-'+id);
       if(toggle) {
         toggle.focus({preventScroll:true});
         const bounds=toggle.getBoundingClientRect();
@@ -513,7 +579,14 @@ async function handleAction(button) {
       }
       break;
     }
-    case 'worksheet-edit':openEditor('worksheet',id,{projectId:state.selected});break;
+    case 'worksheet-save-retry':await sheetEdits.retry(state.selected,Number(id));break;
+    case 'worksheet-discard':sheetEdits.discard(state.selected,Number(id));break;
+    case 'worksheet-find-draft':{
+      const index=worksheet?.data?.rows.findIndex(row=>String(row.id)===id)??-1;
+      if(index<0)break;
+      sheetFilters={...worksheetFilters(),page:pageForIndex(index),expandedId:id};
+      drawWorksheet();document.getElementById('ws-retry-'+id)?.focus();break;
+    }
     case 'worksheet-download':await downloadWorksheet(button);break;
     case 'worksheet-retry':await fetchWorksheet(state.selected,true);drawWorksheet();break;
     case 'worksheet-page':{
@@ -544,14 +617,6 @@ async function handleAction(button) {
     case 'reset-task-filters':state.filters.tasks={query:'',status:'open',projectId:''};renderContent();break;
     case 'discard-draft':await discardDraft();break;
     case 'resume-draft':{const draft=state.pendingDraft;
-      if(draft?.kind==='worksheet'){
-        const project=projectById(draft.projectId), epoch=state.epoch;
-        if(!project?.hasWorksheet || project.archived){notify('Le tableau de ce brouillon est indisponible.');break;}
-        navigate('project',project.id);await fetchWorksheet(project.id);
-        if(epoch!==state.epoch || state.pendingDraft!==draft || state.selected!==project.id)break;
-        if(!currentSheetRow(draft.id)){notify(worksheet?.error || 'Cette option est indisponible. Ton brouillon est conservé.');break;}
-        state.pendingDraft=null;renderPrivate();openEditor('worksheet',draft.id,draft);break;
-      }
       if(draft?.id&&!(draft.kind==='project'?projectById(draft.id):taskById(draft.id))){notify('L’élément du brouillon n’est plus disponible. Le brouillon reste conservé dans cet onglet.');break;}state.pendingDraft=null;renderPrivate();if(draft)openEditor(draft.kind,draft.id,{...draft});break;}
   }
 }
@@ -569,6 +634,15 @@ dialog.addEventListener('change',()=>{if(state.editor)state.editor.dirty=true;})
 dialog.addEventListener('cancel',event=>{event.preventDefault();closeEditor();});
 function updateFilter(event) {
   const input=event.target;
+  const rowField=input.dataset.wsField;
+  if(rowField) {
+    if(!worksheet?.data || !mayRenderSheet(worksheet) || projectById(worksheet.id)?.archived)return;
+    const isSelect=input.tagName==='SELECT';
+    if(isSelect && event.type!=='change')return;
+    const row=currentSheetRow(input.dataset.row);
+    if(row)sheetEdits.edit(worksheet.id,row,rowField,input.value,!isSelect && event.type==='input'?650:0);
+    return;
+  }
   const sheetKey=input.dataset.worksheetFilter;
   if(sheetKey) {
     if((input.tagName==='SELECT')!==(event.type==='change'))return;
@@ -587,6 +661,12 @@ function updateFilter(event) {
   const [group,field]=mappings[key];state.filters[group][field]=field==='archived'?input.value==='archived':input.value;
   renderContent({restoreInput:{id:input.id,start:input.selectionStart,end:input.selectionEnd}});
 }
+document.addEventListener('keydown',event=>{
+  const input=event.target;
+  if(event.key==='Enter' && !event.isComposing && input.dataset.wsField==='decision') {
+    event.preventDefault();input.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+});
 document.addEventListener('input',updateFilter);document.addEventListener('change',updateFilter);
 window.addEventListener('storage',event=>{
   if(event.key===LOGOUT_KEY&&event.newValue)lock('Déconnecté depuis un autre onglet.',{keepDraft:true});
@@ -600,7 +680,7 @@ document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden'&&state.authenticated){purgePrivate({keepDraft:true});loadingScreen();}
   else if(document.visibilityState==='visible'&&state.session)validateSession();
 });
-window.addEventListener('beforeunload',event=>{if(state.editor?.dirty||state.pendingDraft){event.preventDefault();event.returnValue='';}});
+window.addEventListener('beforeunload',event=>{if(state.editor?.dirty||state.pendingDraft||sheetEdits.list().length){event.preventDefault();event.returnValue='';}});
 async function boot() {
   loadingScreen('Ouverture de ton espace…');
   try {

@@ -69,7 +69,8 @@ const PROJECT_STATUSES = new Set(['À qualifier','Idée','En préparation','En c
 const TASK_STATUSES = new Set(['À faire','En cours','Terminé']);
 const WORKSHEET_PRIORITIES = ['1 – Haute','2 – Moyenne','3 – Basse','Non prioritaire'];
 const WORKSHEET_STATUSES = ['Finalisé','En cours','À développer','En attente','Annulé','Autre'];
-const WORKSHEET_COLUMNS = 'id,ref,subject,description,code,articles,family,pages,support,priority,status,comment,revision';
+const WORKSHEET_DECISIONS = ['Retenir','Reporter','Écarter'];
+const WORKSHEET_COLUMNS = 'id,ref,subject,description,code,articles,family,pages,support,priority,status,comment,decision,revision';
 const PUBLIC_APP_URLS = new Set([
   'https://papaye-labs.fr/scoubi/',
   'https://papaye-labs.fr/malomatix/',
@@ -125,10 +126,10 @@ async function readWorksheet(env,projectId,download) {
   const columns = download ? 'workbook' : 'title';
   const worksheet = await env.DB.prepare(`SELECT ${columns} FROM project_worksheets WHERE project_id=?`).bind(projectId).first();
   if (!worksheet) throw new HttpError(404,'Tableau introuvable.');
-  const rowColumns = download ? 'id,priority,status,comment' : WORKSHEET_COLUMNS;
+  const rowColumns = download ? 'id,priority,status,comment,decision' : WORKSHEET_COLUMNS;
   const {results:rows} = await env.DB.prepare(`SELECT ${rowColumns} FROM worksheet_rows WHERE project_id=? ORDER BY id`).bind(projectId).all();
-  if (!download) return response({title:worksheet.title,rows,priorities:WORKSHEET_PRIORITIES,statuses:WORKSHEET_STATUSES});
-  const bytes = await exportWorksheet(worksheet.workbook,rows);
+  if (!download) return response({title:worksheet.title,rows,priorities:WORKSHEET_PRIORITIES,statuses:WORKSHEET_STATUSES,decisions:WORKSHEET_DECISIONS});
+  const bytes = await exportWorksheet(worksheet.workbook,rows,WORKSHEET_DECISIONS);
   return new Response(bytes,{headers:{
     'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'Content-Disposition':'attachment; filename="tableau-de-priorisation.xlsx"',
@@ -138,16 +139,20 @@ async function readWorksheet(env,projectId,download) {
 
 async function changeWorksheetRow(req,env,projectId,rowId) {
   const raw = await body(req);
-  fields(raw,['revision','priority','status','comment']);
+  fields(raw,['revision','priority','status','comment','decision']);
   const revision = revisionInput(raw.revision);
-  if (raw.priority!=='' && !WORKSHEET_PRIORITIES.includes(raw.priority)) throw new HttpError(400,'Priorité invalide.');
-  if (raw.status!=='' && !WORKSHEET_STATUSES.includes(raw.status)) throw new HttpError(400,'Statut invalide.');
-  const comment = notesInput(raw.comment);
-  if (!comment.isWellFormed()) throw new HttpError(400,'Le commentaire contient du texte Unicode invalide.');
-  const row = await env.DB.prepare(`UPDATE worksheet_rows SET priority=?,status=?,comment=?,revision=revision+1
+  if (Object.keys(raw).length===1) throw new HttpError(400,'Choisissez au moins un champ à modifier.');
+  if ('priority' in raw && raw.priority!=='' && !WORKSHEET_PRIORITIES.includes(raw.priority)) throw new HttpError(400,'Priorité invalide.');
+  if ('status' in raw && raw.status!=='' && !WORKSHEET_STATUSES.includes(raw.status)) throw new HttpError(400,'Statut invalide.');
+  if ('decision' in raw && (typeof raw.decision!=='string' || raw.decision.length>400 || !raw.decision.isWellFormed())) {
+    throw new HttpError(400,'La décision doit être un texte de 400 caractères maximum.');
+  }
+  if ('comment' in raw && !notesInput(raw.comment).isWellFormed()) throw new HttpError(400,'Le commentaire contient du texte Unicode invalide.');
+  const row = await env.DB.prepare(`UPDATE worksheet_rows SET
+    priority=COALESCE(?,priority),status=COALESCE(?,status),comment=COALESCE(?,comment),decision=COALESCE(?,decision),revision=revision+1
     WHERE project_id=? AND id=? AND revision=? AND EXISTS
     (SELECT 1 FROM projects WHERE id=worksheet_rows.project_id AND archived=0) RETURNING ${WORKSHEET_COLUMNS}`)
-    .bind(raw.priority,raw.status,comment,projectId,rowId,revision).first();
+    .bind(raw.priority??null,raw.status??null,raw.comment??null,raw.decision??null,projectId,rowId,revision).first();
   if (row) return response({row});
   const exists = await env.DB.prepare('SELECT projects.archived FROM worksheet_rows JOIN projects ON projects.id=worksheet_rows.project_id WHERE project_id=? AND worksheet_rows.id=?').bind(projectId,rowId).first();
   if (!exists) throw new HttpError(404,'Ligne de tableau introuvable.');
