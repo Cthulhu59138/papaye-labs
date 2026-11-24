@@ -25,7 +25,7 @@ function renderCards(container, items, heading) {
     for (const link of item.links ?? []) {
       let url;
       try { url = new URL(link.url); } catch { continue; }
-      if (url.protocol !== "https:" || url.hostname !== "fnp.edf.fr") continue;
+      if (url.protocol !== "https:" || !["fnp.edf.fr", "www.maestria.fr"].includes(url.hostname)) continue;
       const anchor = element("a", link.label);
       anchor.href = url.href;
       anchor.target = "_blank";
