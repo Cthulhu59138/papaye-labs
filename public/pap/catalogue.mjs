@@ -19,6 +19,7 @@ for (const [word, aliases] of Object.entries({
   etancheite: ['etanche','etanches'], enterree: ['enterre','enterrees','enterres'],
   marquage: ['signalisation'], tuyauterie: ['tuyau','tuyaux'], acide: ['acides'],
   basique: ['basiques'], peu: ['faiblement'], agressif: ['agressive','agressifs','agressives'],
+  chaud: ['chauds','chaude','chaudes'],
   pollution: ['pollue','polluee','pollues','polluees'],
 })) {
   for (const alias of aliases) ALIASES.set(alias, word);
@@ -69,14 +70,28 @@ function requestedTemperature(query) {
 
 // Only intervals printed in the group definitions are general. Some file-specific
 // limits below narrow the set to the single system documented by that FT.
-function temperatureEvidence(group, systems, t) {
+const FT_106 = 'https://fnp.edf.fr/fr/ficheconstitutive/download/40419';
+const FT_106_NOTE = 'FT 106 G10/10.10 rév. 14, p. 1 et 4–5 : acier en intérieur sec, jusqu’à 500 °C en service continu. Sur acier mis à nu, vérifier le grenaillage Sa 3, la rugosité Moyen G et le cycle de durcissement. Si l’ancien revêtement est conservé, vérifier la préparation spécifique en page 5.';
+function hasReviewed106(data,c) {
+  return c.groupe === '105' && ['EIA','EID','PIA','PID','PIC'].includes(c.serie) && data.systemes[106]?.ft === FT_106;
+}
+
+function temperatureEvidence(data, c, systems, t) {
+  const group = data.groupes[c.groupe];
   if (t === undefined) return {state:'unfiltered',systems};
   const interval = group.temperature;
   let matches;
   if (interval.startsWith('10 °C < T < 60')) matches = 10 < t && t < 60;
   else if (interval === 'T ≤ 60 °C') matches = t <= 60;
   else if (interval.startsWith('60 °C < T ≤ 120')) matches = 60 < t && t <= 120;
-  else if (interval.startsWith('T > 120 °C')) matches = t > 120;
+  else if (interval.startsWith('T > 120 °C')) {
+    if (t <= 120) return {state:'outside',systems:[]};
+    if (systems.includes(106) && hasReviewed106(data,c)) {
+      return t <= 500 ? {state:'ft',systems:[106],note:FT_106_NOTE} :
+        {state:'unknown',systems:[],note:'La FT 106 fixe un maximum de 500 °C en continu. Le groupe ne précise pas de maximum pour les autres systèmes.'};
+    }
+    return {state:'unknown',systems:[],note:'Le groupe indique un seuil de 120 °C ; sa limite supérieure doit être établie dans la FT de chaque système.'};
+  }
   else if (interval === 'T < 10 °C') matches = t < 10;
   else if (interval === 'T < 50 °C') matches = t < 50;
   else if (interval.startsWith('T < 50 °C ou')) matches = t < 50 || (50 < t && t < 90);
@@ -106,25 +121,177 @@ function systemCard(data,num,usageCodes,matchNames=[]) {
   const names=matchNames.length ? matchNames : [...new Set(s.produits.map(p=>p.nom))];
   const details=['Indice '+s.indice+' du '+s.revision,s.equipement,
     'Produits cités : '+names.join(', ')+'.'];
+  if (Number(num) === 106 && s.ft === FT_106) details.push(FT_106_NOTE);
   if(usageCodes?.length) details.push('Couples associés : '+usageCodes.join(', ')+'.');
   return {title:'FNP '+num+' · '+s.societe,detail:join(details),
     links:[link('Fiche système',s.fiche),link('Fiche technique FR',s.ft)]};
 }
 
+const MAX_ALTERNATIVES = 2;
+const surfaceOf = (data, c) => c.support || data.groupes[c.groupe].support;
+
+function alternativeCard(data, c, number, condition) {
+  const group = data.groupes[c.groupe];
+  const system = data.systemes[number];
+  const links = [link('Codification ' + codeOf(c), c.url), link('FT du FNP ' + number, system.ft)];
+  if (group.complement) links.push(link('Fiche citée dans la précision', group.complement));
+  const check = number === 106 && hasReviewed106(data,c) ? FT_106_NOTE : '';
+  return {
+    title: codeOf(c),
+    detail: [condition, check, 'Exemple publié pour ' + codeOf(c) + ' : FNP ' + number + ' (' + system.societe + ').', group.reserve].filter(Boolean).join(' '),
+    links
+  };
+}
+
+const unspecifiedProtection = 'Protection particulière à préciser';
+const atmospheric = new Set(['Intérieur', 'Extérieur']);
+const zincFinish = /galvanisée|électrozinguée|métallisée au zinc/;
+const limitedService = /nucléaire|potable|radioactif|contamination|irradiation/i;
+
+function nearbyEnvironment(a, b) {
+  if (a.famille !== b.famille || a.travaux !== b.travaux) return false;
+  if (a.famille === 'Extérieur') {
+    const gradeA = Number(a.milieu.match(/\bC([2-5])\b/)?.[1]);
+    const gradeB = Number(b.milieu.match(/\bC([2-5])\b/)?.[1]);
+    return gradeB === gradeA + 1;
+  }
+  if (a.famille === 'Intérieur') {
+    return a.milieu.includes('bâtiment non nucléaire, air peu corrosif') &&
+      b.milieu.includes('bâtiment non nucléaire, air corrosif');
+  }
+  // Two definitions for untreated fresh water, differentiated by water chemistry.
+  return a.milieu.includes('eau douce brute') && b.milieu.includes('eau douce brute') && a.milieu !== b.milieu;
+}
+
+function compareUses(data, original, c, t) {
+  const source = data.groupes[original.groupe], target = data.groupes[c.groupe];
+  const series = data.series[original.serie], other = data.series[c.serie];
+  const surface = surfaceOf(data, original);
+  if (surfaceOf(data, c) !== surface) return;
+  if (c.serie !== original.serie) {
+    if (c.groupe !== original.groupe || series.famille !== other.famille) return;
+    if (series.milieu === other.milieu && series.travaux !== other.travaux &&
+        ![series.travaux,other.travaux].includes('Non précisé')) {
+      return 'Même groupe et même milieu : ' + series.milieu + ' À envisager uniquement pour des travaux de type « ' +
+        other.travaux + ' » au lieu de « ' + series.travaux + ' ». Confirmez le type de travaux.';
+    }
+    if (nearbyEnvironment(series, other)) {
+      return 'Même groupe et mêmes travaux. Le milieu demandé est « ' + series.milieu + ' ». ' +
+        'Cette piste concerne « ' + other.milieu + ' ». Confirmez que cette seconde description correspond au chantier.';
+    }
+    return;
+  }
+  if (!atmospheric.has(series.famille) || !source.etat || !target.etat) return;
+  if (t === undefined && source.temperature !== target.temperature) return;
+  if (source.fonction === unspecifiedProtection && target.fonction !== source.fonction &&
+      source.etat === target.etat && source.temperature === target.temperature && !target.reserve) {
+    return 'Même milieu, même support et même état. La protection demandée reste à préciser. ' +
+      'Piste à examiner si la fonction attendue est « ' + target.fonction + ' ». Confirmez la fonction.';
+  }
+  if (source.fonction !== target.fonction || source.reserve || source.etat === target.etat && source.temperature === target.temperature) return;
+  const sameMetalFamily = surface === 'Métal ferreux' || (zincFinish.test(source.etat) && zincFinish.test(target.etat));
+  if (source.etat !== target.etat && !sameMetalFamily) return;
+  const before = [source.etat, source.temperature].filter(Boolean).join(', ');
+  const after = [target.etat, target.temperature].filter(Boolean).join(', ');
+  return 'Même milieu, même support et même fonction. Le groupe ' + original.groupe + ' décrit « ' + before +
+    ' ». Cette piste concerne « ' + after + ' ». Confirmez que ce second cas décrit la surface et vérifiez sa préparation dans la fiche.';
+}
+
+// Compare documented uses, never the numerical distance between two codes.
+export function findAlternatives(data, original, t) {
+  const options = [];
+  for (const c of data.couples) {
+    if (!c.fnp.length || c === original) continue;
+    const condition = compareUses(data, original, c, t);
+    if (!condition) continue;
+    const proof = temperatureEvidence(data,c,c.fnp,t);
+    if (proof.systems.length) options.push(alternativeCard(data, c, proof.systems[0], condition));
+    if (options.length === MAX_ALTERNATIVES) break;
+  }
+  return options;
+}
+
+export function noAlternativeHint(data, c) {
+  const group = data.groupes[c.groupe];
+  const series = data.series[c.serie];
+  let hint;
+  if (group.fonction === unspecifiedProtection || group.fonction.includes('à préciser')) {
+    hint = 'Précisez la protection indispensable sur cette surface.';
+  } else if (group.reserve || group.temperature.includes('tronqu')) {
+    hint = 'Vérifiez la limite ou la réserve du groupe dans la fiche de codification et la fiche technique.';
+  } else if (series.famille === 'Contact avec un milieu' || limitedService.test(series.milieu)) {
+    hint = 'Confirmez le milieu de service exact et les exigences de protection avec le prescripteur.';
+  } else {
+    hint = 'Confirmez avec le prescripteur la fonction « ' + group.fonction + ' » pour le support « ' + surfaceOf(data,c) + ' ».';
+  }
+  return 'Aucune autre codification suffisamment proche dans le relevé. ' + hint;
+}
+
+// For a hot bare-steel query, the catalogue describes the temperature class
+// separately from the surface preparation. Keep every other requested term.
+function hotSteelOptions(data, terms, tokens, t) {
+  if (!tokens.includes('acier') || !tokens.includes('brut') || (!tokens.includes('chaud') && t === undefined)) return [];
+  const remaining = tokens.filter(token => token !== 'brut');
+  const options = [];
+  for (const c of data.couples) {
+    const g = data.groupes[c.groupe];
+    if (!c.fnp.length || !/^Surface (très )?chaude$/.test(g.etat) || surfaceOf(data,c) !== 'Métal ferreux') continue;
+    if (!remaining.every(token => terms.get(c).has(token))) continue;
+    const proof = temperatureEvidence(data,c,c.fnp,t);
+    if (!proof.systems.length) continue;
+    const s = data.series[c.serie];
+    const condition = s.travaux + ' · ' + s.milieu + ' ' + g.etat + ' : ' + g.temperature +
+      '. Vérifiez la température de surface en service et la préparation de l’acier brut dans la fiche technique.';
+    options.push(alternativeCard(data,c,proof.systems[0],condition));
+    if (options.length === MAX_ALTERNATIVES) break;
+  }
+  return options;
+}
+
+function withAlternatives(response, alternatives) {
+  if (!alternatives.length) return response;
+  return {
+    ...response,
+    message: response.message + ' Des pistes sous conditions figurent ci-dessous.',
+    alternatives
+  };
+}
+
 function showCode(data,c,t,num,remaining) {
   const code=codeOf(c),g=data.groupes[c.groupe];
-  if(num !== undefined && !c.fnp.includes(num)) return answer('Le catalogue n’associe pas le FNP '+num+' au code '+code+'.',[codeCard(data,c,[])]);
+  function otherSystem(response) {
+    if (!data.systemes[num] || remaining) return response;
+    const other = temperatureEvidence(data,c,c.fnp.filter(n=>n!==num),t).systems[0];
+    if (!other) return response;
+    const condition = 'Si la référence FNP ' + num + ' peut changer, ce système figure sous le même code. Confirmez que le produit initial n’est pas imposé. ' + g.temperature;
+    return withAlternatives(response,[alternativeCard(data,c,other,condition)]);
+  }
+  if (num !== undefined && !c.fnp.includes(num)) {
+    return otherSystem(answer('Le catalogue n’associe pas le FNP '+num+' au code '+code+'.',[codeCard(data,c,[])]));
+  }
   const considered = num ? [num] : c.fnp;
-  const proof=temperatureEvidence(g,considered,t);
+  const proof=temperatureEvidence(data,c,considered,t);
   const header=codeCard(data,c,proof.systems);
-  if(proof.state==='outside') return answer(code+' : '+t+' °C est hors de la plage du groupe ('+g.temperature+'). Aucun candidat retenu à cette température.',[header]);
-  if(proof.state==='unknown') return answer('Le catalogue ne permet pas de retenir un système pour '+code+' à '+t+' °C. Vérifiez les conditions propres à la FT.',[header]);
+  if(proof.state==='outside' || proof.state==='unknown') {
+    const message = proof.state === 'outside'
+      ? code+' : '+t+' °C est hors de la plage du groupe ('+g.temperature+'). Aucun candidat retenu à cette température.'
+      : 'Le catalogue ne permet pas de retenir un système pour '+code+' à '+t+' °C. Vérifiez les conditions propres à la FT.';
+    const response = answer([message,proof.note].filter(Boolean).join(' '),[header]);
+    if (num !== undefined) return otherSystem(response);
+    return withAlternatives(response, remaining ? [] : findAlternatives(data,c,t));
+  }
   const systems=proof.systems;
   const cards=systems.slice(0,MAX_RESULTS-1).map(n=>systemCard(data,n));
   const status=systems.length ? systems.length+' système(s) associé(s) à examiner. La fiche technique et le commentaire du système précisent les conditions.' : 'Aucun système publié associé à ce couple.';
   const extra=remaining ? ' La recherche par code ne vérifie pas les autres contraintes rédigées dans votre question.' : '';
-  const info=proof.state==='ft' ? ' Seul le seuil documenté pour le FNP '+systems[0]+' est utilisé ici.' : '';
-  return answer(code+' — '+status+info+extra,[header,...cards],systems.length+1);
+  const info=proof.state==='ft' ? ' Seul le seuil documenté pour le FNP '+systems[0]+' est utilisé ici. ' + (proof.note || '') : '';
+  const response = answer(code+' — '+status+info+extra,[header,...cards],systems.length+1);
+  if (!systems.length && num === undefined && !remaining) {
+    const alternatives = findAlternatives(data,c,t);
+    if (!alternatives.length) response.message += ' ' + noAlternativeHint(data,c);
+    return withAlternatives(response, alternatives);
+  }
+  return response;
 }
 
 function codeList(data,rows,message) {
@@ -165,6 +332,9 @@ export function createCatalogueSearch(data) {
     if(num!==undefined){
       if(!data.systemes[num]) return answer('Le FNP '+num+' est absent de la liste des systèmes publiés du '+data.date+'.');
       const rows=bySystem.get(num), info=systemCard(data,num,rows);
+      if (num === 106 && data.systemes[num].ft === FT_106 && temperature.t > 500) {
+        return answer('Le FNP 106 dépasse sa limite de service continu à '+temperature.t+' °C. La FT indique un maximum de 500 °C.',[info]);
+      }
       const warnings=[...new Set(data.couples.filter(c=>c.fnp.includes(num) && ['154','310'].includes(c.groupe)).map(c=>c.groupe))];
       for(const group of warnings){
         info.detail+=' '+data.groupes[group].reserve;
@@ -197,17 +367,34 @@ export function createCatalogueSearch(data) {
     if(products.length && temperature.t===undefined) return answer(products.length+' système(s) où figurent ce nom commercial ou ce fournisseur : '+listNums(productSystems)+'. Recherchez un numéro FNP pour ouvrir sa fiche et vérifier le couple concerné.',products.slice(0,MAX_RESULTS),products.length);
     if(possibleUnknown) return answer('Ce code ou nom commercial est absent du relevé du '+data.date+'.');
     const matches=[];
+    const withoutSystem=[];
     for(const c of data.couples){
       if(!tokens.every(t=>terms.get(c).has(t))) continue;
-      const proof=temperatureEvidence(data.groupes[c.groupe],c.fnp,temperature.t);
+      const proof=temperatureEvidence(data,c,c.fnp,temperature.t);
+      if (!proof.systems.length) withoutSystem.push(c);
       if(['outside','unknown'].includes(proof.state)) continue;
       matches.push({c,proof});
     }
     // Published choices first, then reference order. No performance ranking is inferred.
     matches.sort((a,b)=>Number(Boolean(b.proof.systems.length))-Number(Boolean(a.proof.systems.length)) || codeOf(a.c).localeCompare(codeOf(b.c),'fr'));
-    if(!matches.length) return answer('Aucune correspondance sur tous les mots et seuils saisis. '+EMPTY_HELP);
+    const alternatives = [];
+    if (!matches.some(m => m.proof.systems.length)) {
+      for (const source of withoutSystem) {
+        for (const card of findAlternatives(data,source,temperature.t)) {
+          if (!alternatives.some(previous => previous.title === card.title)) alternatives.push(card);
+          if (alternatives.length === MAX_ALTERNATIVES) break;
+        }
+        if (alternatives.length === MAX_ALTERNATIVES) break;
+      }
+    }
+    if (!matches.length && !alternatives.length) alternatives.push(...hotSteelOptions(data,terms,tokens,temperature.t));
+    if (!matches.length) {
+      const prompt = alternatives.length ? '' : ' ' + EMPTY_HELP;
+      return withAlternatives(answer('Aucune correspondance sur tous les mots et seuils saisis.' + prompt), alternatives);
+    }
     const qualifier=temperature.t===undefined?'':' Les bornes explicites ont été comparées à '+temperature.t+' °C.';
-    return answer(matches.length+' couple(s) repéré(s) par mots-clés.'+qualifier+' Précisez les conditions ou ouvrez le code pour examiner les systèmes et leurs FT.',matches.slice(0,MAX_RESULTS).map(({c,proof})=>codeCard(data,c,proof.systems)),matches.length);
+    const response = answer(matches.length+' couple(s) repéré(s) par mots-clés.'+qualifier+' Précisez les conditions ou ouvrez le code pour examiner les systèmes et leurs FT.',matches.slice(0,MAX_RESULTS).map(({c,proof})=>codeCard(data,c,proof.systems)),matches.length);
+    return withAlternatives(response, alternatives);
   };
 }
 

@@ -89,3 +89,57 @@ test('PAP : les produits MAT avec numéro restent des noms commerciaux',()=> {
   assert.ok(titles(search('MAT 450')).some(t=>t.startsWith('FNP 1112')));
   assert.ok(titles(search('MAT 300')).some(t=>t.startsWith('FNP 1149')));
 });
+
+test('PAP : les pistes citent leurs propres codes, systèmes et conditions sans changer les totaux exacts', () => {
+  const response = search('EEA 202');
+  assert.deepEqual(titles(response), ['EEA 202']);
+  assert.deepEqual(response.alternatives.map(item=>item.title), ['EEA 200','EEA 201']);
+  for (const item of response.alternatives) {
+    const number = Number(item.detail.match(/Exemple publié pour .*? : FNP (\d+)/)[1]);
+    assert.ok(pair(item.title).fnp.includes(number));
+    assert.ok(item.links.some(l=>l.url===catalog.systemes[number].ft));
+    assert.match(item.detail,/Confirmez/);
+  }
+  assert.equal(search('EEA 219').alternatives, undefined);
+  assert.match(search('EEA 290').message,/Finition peinture.*Bois/);
+  assert.equal(search('EEA 290').alternatives, undefined);
+  assert.equal(search('EEA 999').alternatives, undefined);
+  assert.equal(search('FNP 9876').alternatives, undefined);
+  assert.equal(search('acier béton banane').alternatives, undefined);
+});
+
+test('PAP : les pistes pour acier chaud indiquent le seuil et la préparation à vérifier', () => {
+  const hot = search('acier brut intérieur peu corrosif entretien 200 °C');
+  assert.equal(hot.total,0);
+  assert.deepEqual(hot.alternatives.map(a=>a.title), ['EIA 105']);
+  assert.match(hot.alternatives[0].detail,/intérieur sec.*500 °C.*Sa 3.*Moyen G.*durcissement/);
+  assert.ok(hot.alternatives[0].links.some(l=>l.url===catalog.systemes[106].ft));
+  const unspecified = search('acier brut intérieur peu corrosif entretien surface chaude');
+  assert.deepEqual(unspecified.alternatives.map(a=>a.title), ['EIA 104','EIA 105']);
+  assert.match(unspecified.alternatives[0].detail,/60 °C < T ≤ 120 °C.*préparation de l’acier brut/);
+  assert.deepEqual(search('EEA 200 à 70°C').alternatives.map(a=>a.title), ['EEA 204']);
+  assert.equal(search('ELE 310 à 50°C').alternatives,undefined);
+  assert.equal(search('EIA 154 à 30°C').alternatives,undefined);
+  assert.equal(search('EEA 202 avec contact acide').alternatives,undefined);
+  assert.equal(search('EEA 200 FNP 9999').alternatives,undefined);
+  assert.equal(search('EEA 219 FNP 1119').alternatives[0].title,'EEA 219');
+});
+
+test('PAP : les limites des FT 106 et 1119 restent propres au système documenté', () => {
+  for (const t of [200,500]) {
+    const reply = search('EIA 105 à '+t+'°C');
+    assert.deepEqual(titles(reply),['EIA 105','FNP 106 · GEHOLIT']);
+    assert.match(reply.message,/500 °C en service continu/);
+  }
+  const above = search('EIA 105 à 501°C');
+  assert.match(above.message,/maximum de 500 °C/);
+  assert.equal(above.alternatives,undefined);
+  assert.match(search('FNP 106 à 501°C').message,/dépasse sa limite/);
+  assert.equal(search('acier brut intérieur peu corrosif entretien 501 °C').alternatives,undefined);
+  assert.match(search('EIA 105 FNP 1108 à 200°C').message,/ne permet pas/);
+  assert.equal(search('EEA 205 à 200°C').results.length,1);
+  const options=search('ELE 310 FNP 1118 à 20°C').alternatives;
+  assert.equal(options.length,1);
+  assert.match(options[0].detail,/Si la référence FNP 1118 peut changer.*FT 1119.*FNP 1119/);
+  assert.equal(search('ELE 310 FNP 1118 à 50°C').alternatives,undefined);
+});

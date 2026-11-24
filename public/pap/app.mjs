@@ -16,11 +16,11 @@ function element(tag, value, className) {
   return node;
 }
 
-function showResults(response) {
+function renderCards(container, items, heading) {
   const fragment = document.createDocumentFragment();
-  for (const item of response.results) {
+  for (const item of items) {
     const card = element("li", null, "result");
-    card.append(element("h3", item.title), element("p", item.detail));
+    card.append(element(heading, item.title), element("p", item.detail));
     const links = element("div", null, "result-links");
     for (const link of item.links ?? []) {
       let url;
@@ -35,7 +35,14 @@ function showResults(response) {
     card.append(links);
     fragment.append(card);
   }
-  $("results").replaceChildren(fragment);
+  container.replaceChildren(fragment);
+}
+
+function showResults(response) {
+  renderCards($("results"), response.results, "h3");
+  const section = $("search-alternatives");
+  renderCards(section.querySelector("ul"), response.alternatives || [], "h4");
+  section.hidden = !response.alternatives?.length;
   const count = response.total > response.results.length ? ` (${response.results.length} affichés sur ${response.total}.)` : "";
   $("search-feedback").textContent = response.message + count;
 }
@@ -47,6 +54,7 @@ async function runSearch(raw, isCurrent = () => true) {
   searchInput.value = query;
   $("search-feedback").textContent = "Recherche dans le catalogue…";
   $("results").replaceChildren();
+  $("search-alternatives").hidden = true;
   let result;
   try {
     result = query

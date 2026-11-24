@@ -1,4 +1,4 @@
-import { loadCatalogue } from './catalogue.mjs';
+import { loadCatalogue, findAlternatives, noAlternativeHint } from './catalogue.mjs';
 
 const byId = id => document.getElementById(id);
 const travaux = byId('travaux');
@@ -11,6 +11,7 @@ const groupDetail = byId('group-detail');
 const status = byId('guide-status');
 const table = byId('candidats');
 const retry = byId('guide-retry');
+const alternativesSection = byId('guide-alternatives');
 let data;
 
 function element(tag, text) {
@@ -121,6 +122,8 @@ function candidateRow(number) {
 }
 
 function showCandidates() {
+  alternativesSection.hidden = true;
+  alternativesSection.querySelector('ul').replaceChildren();
   groupDetail.replaceChildren();
   table.tBodies[0].replaceChildren();
   table.hidden = true;
@@ -132,7 +135,23 @@ function showCandidates() {
   const count = couple.fnp.length;
   const code = couple.serie + ' ' + couple.groupe;
   if (!count) {
-    status.textContent = 'Aucun système publié associé à ' + code + ' dans ce relevé.';
+    const options = findAlternatives(data, couple);
+    status.textContent = 'Aucun système publié associé à ' + code + ' dans ce relevé. ' +
+      (options.length ? 'Des pistes sous conditions figurent ci-dessous.' : noAlternativeHint(data, couple));
+    if (options.length) {
+      const list = alternativesSection.querySelector('ul');
+      for (const option of options) {
+        const row = document.createElement('li');
+        row.className = 'result';
+        row.append(element('h4', option.title), element('p', option.detail));
+        const links = document.createElement('div');
+        links.className = 'result-links';
+        links.append(...option.links.map(link => source(link.label, link.url)));
+        row.append(links);
+        list.append(row);
+      }
+      alternativesSection.hidden = false;
+    }
     return;
   }
   status.textContent = count + (count === 1 ? ' système candidat pour ' : ' systèmes candidats pour ') + code + '.';
