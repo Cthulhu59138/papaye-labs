@@ -1,4 +1,4 @@
-import { loadCatalogue, findAlternatives, noAlternativeHint } from './catalogue.mjs';
+import { loadCatalogue, technicalNotes, findAlternatives, noAlternativeHint } from './catalogue.mjs';
 
 const byId = id => document.getElementById(id);
 const travaux = byId('travaux');
@@ -70,7 +70,7 @@ function updateSupports() {
   const selection = data.series[serie.value];
   byId('serie-detail').textContent = selection ? [selection.travaux, selection.milieu].join(' · ') : '';
   groupStep.disabled = !selection;
-  fillFilter(support, 'Tous les supports', couplesForSeries().map(material));
+  fillFilter(support, 'Tous les matériaux', couplesForSeries().map(material));
   updateGroups();
 }
 
@@ -91,7 +91,7 @@ function describeGroup(couple) {
   const list = document.createElement('dl');
   list.className = 'guide-conditions';
   for (const [label, value] of [
-    ['Support', material(couple)], ['État ou emplacement', item.etat],
+    ['Surface à peindre', material(couple)], ['État ou emplacement', item.etat],
     ['Protection recherchée', item.fonction], ['Température de surface en service', item.temperature]
   ]) {
     if (value) list.append(element('dt', label), element('dd', value));
@@ -117,7 +117,19 @@ function candidateRow(number) {
   const sheet = source('Fiche technique', system.ft);
   sheet.setAttribute('aria-label', 'Fiche technique du FNP ' + number);
   documentCell.append(sheet);
-  row.append(header, element('td', system.societe), element('td', products.join(' · ')), documentCell);
+  const productsCell = element('td', products.join(' · '));
+  const notes = technicalNotes(data, number);
+  if (notes.length) {
+    const details = document.createElement('details');
+    details.name = 'pap-systeme';
+    details.dataset.fnp = number;
+    details.addEventListener('toggle', () => table.dispatchEvent(new Event('selection-fnp')));
+    const label = element('summary', 'Détails techniques');
+    label.setAttribute('aria-label', 'Détails techniques du FNP ' + number);
+    details.append(label, ...notes.map(note => element('p', note)));
+    productsCell.append(details);
+  }
+  row.append(header, element('td', system.societe), productsCell, documentCell);
   return row;
 }
 
@@ -126,6 +138,7 @@ function showCandidates() {
   alternativesSection.querySelector('ul').replaceChildren();
   groupDetail.replaceChildren();
   table.tBodies[0].replaceChildren();
+  table.dispatchEvent(new Event('selection-fnp'));
   table.hidden = true;
   status.textContent = '';
   if (!groupe.value) return;
