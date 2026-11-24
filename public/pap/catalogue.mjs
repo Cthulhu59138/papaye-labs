@@ -350,6 +350,14 @@ function showCode(data,c,t,num,remaining,continuous) {
   if (num !== undefined && !c.fnp.includes(num)) {
     const notice = currentReview(data, fichesRadiologiques, num);
     if (notice?.noticeCodes?.includes(code)) {
+      if (t !== undefined) {
+        const outsideGroup = (['100','103','120'].includes(c.groupe) && t > 60)
+          || (c.groupe === '104' && (t <= 60 || t > 120)) || (c.groupe === '105' && t <= 120);
+        if (outsideGroup)
+          return answer('La notice du FNP '+num+' cite '+code+', mais '+t+' °C est hors de la plage de ce groupe ('+g.temperature+').',[systemCard(data,num)]);
+        if (num === 1140 && currentReview(data, fichesThermiques, num) && t > 250)
+          return answer('La notice cite '+code+', mais '+t+' °C dépasse le plafond de 250 °C en continu du FNP 1140. Cette extension ne valide pas la température demandée.',[systemCard(data,num)]);
+      }
       const temp = t === undefined ? '' : ' La demande à '+t+' °C requiert la vérification du groupe et de la limite thermique de cette fiche.';
       return answer('La notice du FNP '+num+' documente un emploi sous conditions pour '+code+', en complément des associations affichées dans le tableau.'+temp+' Vérifiez le domaine exact dans la notice.',[systemCard(data,num)]);
     }

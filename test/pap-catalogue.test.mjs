@@ -231,6 +231,8 @@ test('PAP : une extension de notice reste distincte du tableau et de la qualific
   assert.deepEqual(titles(uv), ['FNP 1140 · JOTUN']);
   assert.match(uv.results[0].detail, /à l’abri des UV/);
   assert.equal(uv.alternatives, undefined);
+  assert.match(search('PID 105 FNP 1140 à 600 °C').message,/dépasse le plafond de 250 °C/);
+  assert.match(search('PID 100 FNP 1140 à 200 °C').message,/hors de la plage/);
   assert.match(search('PIC 105 FNP 1162 à 350 °C RRC-B').message,/ne démontre pas.*RRC-B/);
   assert.match(search('PIC 105 à 350 °C accident grave').message,/Indiquez le système/);
 });
