@@ -1,7 +1,7 @@
 import {PROJECT_STATUSES,TASK_STATUSES,ACCESS_LABELS,SESSION_KEY,LOGOUT_KEY,escape as e,safeHref,parisDay,dateLabel,dueLabel,projectProgress,activeTasks,sortTasks,filterProjects,filterTasks,parseSession,canShare,validateProject,validateTask} from './dashboard-model.mjs';
 import {setFormBusy,readFormValues} from './dashboard-forms.mjs';
 import {createConfirmation} from './dashboard-confirm.mjs';
-import {worksheetFilters,worksheetMarkup,worksheetPage,worksheetFeedback,worksheetRecovery,worksheetCount,pageForIndex} from './dashboard-worksheet.mjs?v=3';
+import {worksheetFilters,worksheetMarkup,worksheetPage,worksheetRowsMarkup,worksheetFeedback,worksheetRecovery,worksheetCount,hasWorksheetReturn,worksheetViewState,restoreWorksheetView,pageForIndex} from './dashboard-worksheet.mjs?v=4';
 import {createWorksheetEdits} from './dashboard-worksheet-edits.mjs';
 
 const app = document.querySelector('#app');
@@ -41,6 +41,25 @@ const sheetEdits=createWorksheetEdits({
   saved:project=>{if(worksheet?.id===project)worksheet.didSave=true;},
 });
 let sheetFilters = worksheetFilters();
+
+function rememberWorksheetView() {
+  const url=new URL(location.href);
+  if(sheetFilters.returnsOnly)url.searchParams.set('vue','retours');
+  else url.searchParams.delete('vue');
+  const view=worksheetViewState(worksheet.id,state.session.login,sheetFilters);
+  history.replaceState({...history.state,worksheet:view},'',url);
+}
+function forgetWorksheetView({removeMode=false}={}) {
+  const previous=history.state || {};
+  const url=new URL(location.href);
+  if(removeMode)url.searchParams.delete('vue');
+  if(previous.worksheet || url.href!==location.href) {
+    const {worksheet:unused,...remaining}=previous;
+    history.replaceState(remaining,'',url);
+  }
+  sheetFilters=worksheetFilters();
+}
+
 let returnFocus = null;
 let toastTimer;
 let validationPromise;
@@ -88,7 +107,7 @@ function purgePrivate({keepDraft=false}={}) {
   confirmation.cancel();
   worksheet = null;
   sheetEdits.pause(!keepDraft);
-  if (!keepDraft) sheetFilters = worksheetFilters();
+  if (!keepDraft) forgetWorksheetView({removeMode:true});
   state.epoch++;state.authenticated = false;state.projects=[];state.tasks=[];
   clearTimeout(state.expiryTimer);clearToast();hideEditor();app.replaceChildren();
 }
@@ -256,7 +275,7 @@ function updateWorksheetProgress() {
   if(drafts.some(d=>d.busy))text='Enregistrement…';
   else if(drafts.some(d=>d.error))text='Saisie à reprendre';
   else if(drafts.length)text='Saisie en attente…';
-  else if(worksheet.didSave)text='Modifications enregistrées.';
+  else text=worksheet.didSave?'Modifications enregistrées.':'Retours chargés depuis le serveur.';
   if(status.textContent!==text)status.textContent=text;
 }
 function drawWorksheet() {
@@ -267,26 +286,68 @@ function drawWorksheet() {
   } else if (worksheet.data) {
     const active=panel.contains(document.activeElement)?document.activeElement:null;
     const edits=sheetEdits.list(worksheet.id);
+    sheetFilters.page=worksheetPage(worksheet.data.rows,sheetFilters).page;
+    worksheet.deferredLayout=false;
+    rememberWorksheetView();
     panel.innerHTML=worksheetMarkup(worksheet.data,sheetFilters,projectById(worksheet.id)?.archived,new Map(edits.map(d=>[d.id,d])));
     updateWorksheetProgress();
     if(active?.id) {
-      const target=document.getElementById(active.id) || (active.dataset.wsField && panel.querySelector('[data-ws-field="'+active.dataset.wsField+'"]')) || document.getElementById('worksheet-query');
+      const target=document.getElementById(active.id) || document.getElementById('worksheet-query');
       target?.focus({preventScroll:true});
       if(typeof active.selectionStart==='number' && typeof target?.selectionStart==='number')target.setSelectionRange(active.selectionStart,active.selectionEnd);
     }
+    worksheet.focusedRowId=worksheetRowAt(document.activeElement);
   }
+}
+function worksheetRowAt(element) {
+  const tr=element?.closest?.('[data-ws-row]');
+  return tr?Number(tr.dataset.wsRow):null;
+}
+// Keep an editing row mounted until the user leaves it. Other matching rows keep
+// their original controls, including focus, selection and pointer interactions.
+function syncWorksheetPage(panel,page,edits) {
+  const {items,offset,total,pages}=page;
+  const visibleIds=new Set(items.map(row=>row.id));
+  // During a native change preceding focusout the browser can briefly report
+  // BODY as active. The last focusin remains authoritative through that gap.
+  worksheet.deferredLayout=worksheet.focusedRowId!=null && !visibleIds.has(worksheet.focusedRowId);
+  if(worksheet.deferredLayout)return;
+
+  const body=panel.querySelector('.ws-table tbody');
+  const mounted=new Map([...body.querySelectorAll('[data-ws-row]')].map(tr=>[Number(tr.dataset.wsRow),tr]));
+  for(const [id,tr] of mounted)if(!visibleIds.has(id)) {
+    document.getElementById('ws-detail-'+id)?.remove();
+    tr.remove();
+  }
+  let before=null;
+  for(const row of [...items].reverse()) {
+    let tr=mounted.get(row.id);
+    if(!tr) {
+      const html=worksheetRowsMarkup([row],worksheet.data,sheetFilters,projectById(worksheet.id)?.archived,edits);
+      if(before)before.insertAdjacentHTML('beforebegin',html);
+      else body.insertAdjacentHTML('beforeend',html);
+      tr=body.querySelector('[data-ws-row="'+row.id+'"]');
+    }
+    before=tr;
+  }
+  panel.querySelector('.ws-table-wrap').hidden=!items.length;
+  const pager=panel.querySelector('.ws-pager');
+  pager.hidden=pages===1;
+  pager.querySelector('span').textContent='Page '+page.page+' sur '+pages;
+  const [previous,next]=pager.querySelectorAll('button');
+  previous.dataset.page=page.page-1;previous.disabled=page.page===1;
+  next.dataset.page=page.page+1;next.disabled=page.page===pages;
+  if(sheetFilters.page!==page.page){sheetFilters.page=page.page;rememberWorksheetView();}
+  const count=document.getElementById('ws-count'),label=worksheetCount(offset,items.length,total);
+  if(count.textContent!==label)count.textContent=label;
 }
 function syncWorksheetRow(project,id) {
   if(!worksheet?.data || worksheet.id!==project || !mayRenderSheet(worksheet))return;
   const panel=document.getElementById('project-worksheet');
   if(!panel || !panel.querySelector('#ws-count'))return;
-  const {items,offset,total,pages}=worksheetPage(worksheet.data.rows,sheetFilters);
-  const visible=[...panel.querySelectorAll('[data-ws-row]')].map(tr=>Number(tr.dataset.wsRow));
-  const previousPages=Number(panel.querySelector('.ws-pager')?.dataset.pages)||1;
-  if(previousPages!==pages || visible.length!==items.length || items.some((row,i)=>row.id!==visible[i])) {
-    drawWorksheet();
-    return;
-  }
+  const edits=new Map(sheetEdits.list(project).map(draft=>[draft.id,draft]));
+  syncWorksheetPage(panel,worksheetPage(worksheet.data.rows,sheetFilters),edits);
+  document.getElementById('ws-return-count').textContent=worksheet.data.rows.filter(hasWorksheetReturn).length;
   updateWorksheetProgress();
   const row=currentSheetRow(id);
   if(!row)return;
@@ -310,9 +371,8 @@ function syncWorksheetRow(project,id) {
   for(const option of [...decisionFilter.options])if(option.value && !expected.has(option.value))option.remove();
   const actual=new Set([...decisionFilter.options].map(opt=>opt.value));
   for(const option of expected)if(!actual.has(option))decisionFilter.add(new Option(option,option));
-  const count=document.getElementById('ws-count'),text=worksheetCount(offset,items.length,total);
-  if(count.textContent!==text)count.textContent=text;
-  const recovery=worksheetRecovery(worksheet.data.rows,new Map(sheetEdits.list(project).map(d=>[d.id,d])),new Set(visible));
+  const visible=new Set([...panel.querySelectorAll('[data-ws-row]')].map(tr=>Number(tr.dataset.wsRow)));
+  const recovery=worksheetRecovery(worksheet.data.rows,edits,visible);
   const location=document.getElementById('ws-recovery');
   if(location.dataset.last!==recovery){location.innerHTML=recovery;location.dataset.last=recovery;}
 }
@@ -357,11 +417,13 @@ async function validateSession({message=''}={}) {
       if(epoch!==state.epoch)return;
       state.configured=!!me.configured;
       if(!me.authenticated || !candidate || candidate.expiresAt<=Date.now()) {
+        forgetWorksheetView();
         state.session=null;removeStoredSession();state.loginError=message || (candidate ? 'Ta session a expiré. Reconnecte-toi pour continuer.' : '');
         renderLogin();return;
       }
       state.session={...candidate,login:me.login,csrf:me.csrf};
       if(!await loadData(epoch))return;
+      sheetFilters=restoreWorksheetView(history.state?.worksheet,state.selected,me.login,new URL(location.href).searchParams.get('vue'));
       state.authenticated=true;scheduleExpiry();renderPrivate();
     } catch(error) {
       if(epoch!==state.epoch)return;
@@ -547,10 +609,11 @@ async function logout() {
 }
 function navigate(view,id=null) {
   if(!state.authenticated)return;
-  if (id!==state.selected || view!=='project') {worksheet=null;sheetFilters=worksheetFilters();}
+  const sameProject=view==='project' && id===state.selected;
+  if (!sameProject) {worksheet=null;forgetWorksheetView({removeMode:true});}
   const url=new URL(location.href);
   if(view==='project' && id)url.searchParams.set('projet',id);else url.searchParams.delete('projet');
-  history.replaceState(null,'',url);
+  history.replaceState(history.state,'',url);
   state.view=view;state.selected=id;renderPrivate({focus:true});window.scrollTo({top:0,behavior:'instant'});
 }
 async function discardDraft() {
@@ -566,6 +629,13 @@ async function handleAction(button) {
   if(action==='close-editor'){await closeEditor();return;}
   if(!state.authenticated)return;
   switch(action) {
+    case 'worksheet-mode':
+      sheetFilters.returnsOnly=button.dataset.mode==='returns';
+      sheetFilters.page=1;sheetFilters.expandedId=null;
+      drawWorksheet();break;
+    case 'worksheet-reset':
+      sheetFilters={...worksheetFilters(),returnsOnly:sheetFilters.returnsOnly};
+      drawWorksheet();document.getElementById('worksheet-query')?.focus();break;
     case 'worksheet-toggle': {
       sheetFilters.expandedId=sheetFilters.expandedId===id?null:id;
       drawWorksheet();
@@ -667,9 +737,27 @@ document.addEventListener('keydown',event=>{
     event.preventDefault();input.dispatchEvent(new Event('change',{bubbles:true}));
   }
 });
+document.addEventListener('focusin',event=>{
+  if(worksheet)worksheet.focusedRowId=worksheetRowAt(event.target);
+});
+document.addEventListener('focusout',event=>{
+  const previous=event.target.closest?.('[data-ws-row]');
+  if(!previous || !worksheet || previous.contains(event.relatedTarget))return;
+  const current=worksheet;
+  // The native Tab/click transition finishes after focusout. Recompute from
+  // the real active element, including when it moves back inside this row.
+  setTimeout(()=>{
+    if(!mayRenderSheet(current))return;
+    current.focusedRowId=worksheetRowAt(document.activeElement);
+    if(current.deferredLayout)syncWorksheetRow(current.id,Number(previous.dataset.wsRow));
+  },0);
+});
 document.addEventListener('input',updateFilter);document.addEventListener('change',updateFilter);
 window.addEventListener('storage',event=>{
-  if(event.key===LOGOUT_KEY&&event.newValue)lock('Déconnecté depuis un autre onglet.',{keepDraft:true});
+  if(event.key===LOGOUT_KEY&&event.newValue) {
+    forgetWorksheetView({removeMode:true});
+    lock('Déconnecté depuis un autre onglet.',{keepDraft:true});
+  }
   else if(event.key===SESSION_KEY&&state.remember&&event.newValue!==JSON.stringify({sessionToken:state.session?.sessionToken,expiresAt:state.session?.expiresAt})) {
     state.session=null;if(document.visibilityState==='visible')validateSession();else purgePrivate({keepDraft:true});
   }

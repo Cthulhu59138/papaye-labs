@@ -1,12 +1,33 @@
 import {escape as e} from './dashboard-model.mjs';
 
 const pageSize=12;
-export const worksheetFilters=()=>({query:'',code:'',priority:'',status:'',decision:'',page:1,expandedId:null});
+export const worksheetFilters=()=>({query:'',code:'',priority:'',status:'',decision:'',returnsOnly:false,page:1,expandedId:null});
 const fields=[['status','Statut','statuses'],['decision','Décision','decisions'],['priority','Priorité','priorities']];
+
+// Each result is a distinct subject, using only the values acknowledged by the API.
+export const hasWorksheetReturn=row=>[row.priority,row.decision,row.comment].some(value=>value?.trim());
+
+const filterKeys=['query','code','priority','status','decision'];
+export function worksheetViewState(project,login,filters) {
+  const view={project,login,page:filters.page,returnsOnly:filters.returnsOnly};
+  for(const key of filterKeys)view[key]=filters[key];
+  return view;
+}
+export function restoreWorksheetView(view,project,login,mode) {
+  const filters=worksheetFilters();
+  if(project && login && view?.project===project && view.login===login) {
+    if(Number.isSafeInteger(view.page) && view.page>0)filters.page=view.page;
+    for(const key of filterKeys)if(typeof view[key]==='string')filters[key]=view[key];
+    filters.returnsOnly=view.returnsOnly===true;
+  }
+  if(mode==='retours')filters.returnsOnly=true;
+  return filters;
+}
 
 export function filterWorksheet(rows,filters) {
   const needle=filters.query.trim().toLocaleLowerCase('fr');
-  return rows.filter(row=>(!filters.code || row.code===filters.code)
+  return rows.filter(row=>(!filters.returnsOnly || hasWorksheetReturn(row))
+    && (!filters.code || row.code===filters.code)
     && fields.every(([field])=>!filters[field] || row[field]===filters[field])
     && (!needle || [row.subject,row.description,row.ref,row.articles,row.family,row.decision,row.comment].join(' ').toLocaleLowerCase('fr').includes(needle)));
 }
@@ -22,14 +43,12 @@ function options(values,selected) {
 function filterSelect(key,label,blank,values,selected) {
   return `<label for="worksheet-${key}">${label}<select id="worksheet-${key}" data-worksheet-filter="${key}"><option value="">${blank}</option>${options(values,selected)}</select></label>`;
 }
-function detailMarkup(row,archived,values) {
+function detailMarkup(row) {
   const references=[['Pages du PDF',row.pages],['Repère',row.ref],['Famille',row.family],['Support',row.support]].filter(([,value])=>value);
   const id=e(row.id);
-  return `<tr class="ws-detail" id="ws-detail-${id}"><td colspan="6"><div class="ws-detail-body">
+  return `<tr class="ws-detail" id="ws-detail-${id}"><td colspan="7"><div class="ws-detail-body">
     <p class="ws-description">${e(row.description)}</p>
     <dl class="ws-references">${references.map(([label,value])=>`<div><dt>${label}</dt><dd>${e(value)}</dd></div>`).join('')}</dl>
-    <label for="ws-comment-${id}">Commentaire libre</label>
-    ${archived?`<p id="ws-comment-${id}" class="ws-comment">${e(row.comment)||'Aucun commentaire.'}</p>`:`<textarea id="ws-comment-${id}" rows="2" maxlength="8000" data-row="${id}" data-ws-field="comment">${e(values.comment??row.comment)}</textarea>`}
     </div></td></tr>`;
 }
 export function worksheetFeedback(row,entry) {
@@ -43,7 +62,7 @@ export function worksheetFeedback(row,entry) {
   return `<div role="alert">${e(entry.error)}</div>${comparison}<button class="button small" type="button" id="ws-retry-${id}" data-action="worksheet-save-retry" data-id="${id}">${label}</button>
     ${!entry.conflict||entry.reviewed?`<button type="button" class="button text small" data-action="worksheet-discard" data-id="${id}">Écarter ma saisie</button>`:''}`;
 }
-function rowsMarkup(rows,sheet,filters,archived,edits) {
+export function worksheetRowsMarkup(rows,sheet,filters,archived,edits) {
   return rows.map(row=>{
     const id=e(row.id), expanded=String(row.id)===filters.expandedId, entry=edits.get(row.id), values=entry?.values??{};
     const toggle=`data-action="worksheet-toggle" data-id="${id}" aria-expanded="${expanded}"${expanded?` aria-controls="ws-detail-${id}"`:''}`;
@@ -55,7 +74,11 @@ function rowsMarkup(rows,sheet,filters,archived,edits) {
       ${fields.map(([field,label,list])=>{
         const value=values[field]??row[field]??'';
         return `<td class="ws-choice"><span class="ws-mobile-label" aria-hidden="true">${label}</span>${archived?e(value)||'—':field==='decision'?`<input type="text" list="ws-decision-suggestions" maxlength="400" autocomplete="off" id="ws-decision-${id}" data-row="${id}" data-ws-field="decision" aria-label="Décision pour ${e(row.subject)}" value="${e(value)}">`:`<select id="ws-${field}-${id}" data-row="${id}" data-ws-field="${field}" aria-label="${label} pour ${e(row.subject)}"><option value="">—</option>${options(sheet[list],value)}</select>`}</td>`;
-      }).join('')}</tr>${expanded?detailMarkup(row,archived,values):''}`;
+      }).join('')}
+      <td class="ws-comment-cell"><span class="ws-mobile-label" aria-hidden="true">Commentaire libre</span>${archived
+        ? `<p class="ws-comment">${e(row.comment)||'—'}</p>`
+        : `<textarea id="ws-comment-${id}" rows="2" maxlength="8000" data-row="${id}" data-ws-field="comment" aria-label="Commentaire libre pour ${e(row.subject)}">${'\n'+e(values.comment??row.comment??'')}</textarea>`}</td>
+      </tr>${expanded?detailMarkup(row):''}`;
   }).join('');
 }
 export function worksheetRecovery(rows,edits,visibleIds) {
@@ -70,16 +93,22 @@ export function worksheetMarkup(sheet,filters,archived=false,edits=new Map()) {
   const codes=[...new Set(sheet.rows.map(row=>row.code))].sort((a,b)=>a.localeCompare(b,'fr'));
   return `<div class="ws-heading"><h2 id="worksheet-title">${e(sheet.title)}</h2>
     <button class="button" data-action="worksheet-download">Télécharger le classeur Excel</button></div>
+    <div class="ws-views" role="group" aria-label="Vue du tableau">
+      <button type="button" class="button small" id="ws-all" data-action="worksheet-mode" data-mode="all" aria-pressed="${!filters.returnsOnly}">Tous les sujets <span class="count">${sheet.rows.length}</span></button>
+      <button type="button" class="button small" id="ws-returns" data-action="worksheet-mode" data-mode="returns" aria-pressed="${filters.returnsOnly}" aria-describedby="ws-returns-help">Mes retours <span class="count" id="ws-return-count">${sheet.rows.filter(hasWorksheetReturn).length}</span></button>
+      <span id="ws-returns-help">Sujets avec une décision, une priorité ou un commentaire.</span>
+    </div>
     <div class="ws-filters"><label for="worksheet-query">Rechercher<input id="worksheet-query" data-worksheet-filter="query" type="search" value="${e(filters.query)}" placeholder="Sujet, paragraphe, repère…"></label>
     ${filterSelect('code','Code','Tous les codes',codes,filters.code)}
     ${filterSelect('status','Statut','Tous les statuts',sheet.statuses,filters.status)}
     ${filterSelect('decision','Décision','Toutes les décisions',decisions,filters.decision)}
     ${filterSelect('priority','Priorité','Toutes les priorités',sheet.priorities,filters.priority)}</div>
-    <div class="ws-countbar"><p class="ws-count" id="ws-count" role="status">${worksheetCount(offset,items.length,total)}</p><span id="ws-save-status" role="status"></span></div>
+    <div class="ws-countbar"><p class="ws-count" id="ws-count" role="status">${worksheetCount(offset,items.length,total)}</p><span id="ws-save-status" role="status">Retours chargés depuis le serveur.</span>
+    ${filterKeys.some(key=>filters[key])?'<button type="button" class="button text small" data-action="worksheet-reset">Effacer les filtres</button>':''}</div>
     <datalist id="ws-decision-suggestions">${options(sheet.decisions,undefined)}</datalist>
     <div id="ws-recovery">${worksheetRecovery(sheet.rows,edits,new Set(items.map(r=>r.id)))}</div>
-    ${items.length?`<div class="ws-table-wrap"><table class="ws-table" aria-labelledby="worksheet-title"><thead><tr>${['Sujet','Détails','Code et paragraphe','Statut','Décision','Priorité'].map(label=>`<th scope="col">${label}</th>`).join('')}</tr></thead><tbody>${rowsMarkup(items,sheet,filters,archived,edits)}</tbody></table></div>`:''}
-    ${pages>1?`<nav class="ws-pager" data-pages="${pages}" aria-label="Pages du tableau"><button class="button small" data-action="worksheet-page" data-page="${page-1}" ${page===1?'disabled':''}>Précédente</button><span>Page ${page} sur ${pages}</span><button class="button small" data-action="worksheet-page" data-page="${page+1}" ${page===pages?'disabled':''}>Suivante</button></nav>`:''}`;
+    <div class="ws-table-wrap" ${items.length?'':'hidden'}><table class="ws-table" aria-labelledby="worksheet-title"><thead><tr>${['Sujet','Détails','Code et paragraphe','Statut','Décision','Priorité','Commentaire libre'].map(label=>`<th scope="col">${label}</th>`).join('')}</tr></thead><tbody>${worksheetRowsMarkup(items,sheet,filters,archived,edits)}</tbody></table></div>
+    <nav class="ws-pager" ${pages>1?'':'hidden'} aria-label="Pages du tableau"><button class="button small" data-action="worksheet-page" data-page="${page-1}" ${page===1?'disabled':''}>Précédente</button><span>Page ${page} sur ${pages}</span><button class="button small" data-action="worksheet-page" data-page="${page+1}" ${page===pages?'disabled':''}>Suivante</button></nav>`;
 }
 export const worksheetCount=(offset,length,total)=>total?`${offset+1} à ${offset+length} sur ${total} option${total>1?'s':''}`:'Aucune option pour ces filtres.';
 export const pageForIndex=index=>1+Math.floor(Math.max(index,0)/pageSize);

@@ -1,6 +1,10 @@
-.worksheet-panel { margin: 0 0 24px; }
+.worksheet-panel { margin: 0 0 24px; container-type: inline-size; }
 .ws-heading, .ws-pager { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
 .ws-heading h2 { font-size: 1.45rem; }
+.ws-views {display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:12px;}
+.ws-views .button {min-height:36px;padding:6px 10px;}
+.ws-views [aria-pressed="true"] {background:var(--accent-soft);border-color:var(--accent);color:var(--accent-dark);}
+#ws-returns-help {font-size:.9rem;color:var(--muted);}
 .ws-filters { display: grid; grid-template-columns: minmax(160px,1.6fr) repeat(4,minmax(110px,1fr)); gap: 8px; margin: 14px 0 8px; }
 .ws-filters label { margin: 0; }
 .ws-filters select, .ws-filters input:not([type=checkbox]) { min-width: 0; margin: 3px 0 0; padding: 7px; font-size: 1rem; }
@@ -8,9 +12,10 @@
 .ws-count { margin: 6px 0; font-size: .94rem; }
 .ws-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 1rem; line-height: 1.3; }
 .ws-table thead th { text-align: left; color: var(--muted); font-size: .94rem; font-weight: 600; padding: 7px 5px; background: var(--paper); }
-.ws-table thead th:nth-child(1) { width: 28%; }
-.ws-table thead th:nth-child(2) { width: 52px; }
-.ws-table thead th:nth-child(3) { width: 21%; }
+.ws-table thead th:nth-child(1) { width: 22%; }
+.ws-table thead th:nth-child(2) { width: 48px; }
+.ws-table thead th:nth-child(3) { width: 16%; }
+.ws-table thead th:nth-child(7) {width:21%;}
 .ws-summary { border-bottom: 1px solid var(--border); }
 .ws-summary th,.ws-summary td { padding: 2px 5px; vertical-align: middle; overflow-wrap: anywhere; }
 .ws-summary th { text-align: left; }
@@ -34,8 +39,9 @@
 .ws-references { margin: 0 0 10px; display: flex; flex-wrap: wrap; gap: 6px 22px; }
 .ws-references dt { font-size: .92rem; font-weight: 600; color: var(--muted); }
 .ws-references dd { margin: 1px 0 0; }
-.ws-detail-body textarea { margin-bottom: 0; min-height: 50px; }
+.ws-comment-cell textarea {width:100%;margin:0;min-height:38px;padding:3px 5px;line-height:1.25;font-size:.98rem;}
 .ws-comment { margin: 0; white-space: pre-wrap; }
+.ws-pager[hidden],.ws-table-wrap[hidden] {display:none;}
 .ws-pager { justify-content: flex-end; margin-top: 12px; }
 @media (max-width: 1050px) {
   .ws-filters { grid-template-columns: repeat(4,minmax(0,1fr)); }
@@ -43,6 +49,8 @@
 }
 @media (max-width: 850px) {
   .worksheet-panel { padding: 14px; }
+}
+@container (max-width: 730px) {
   .ws-table, .ws-table tbody, .ws-detail, .ws-detail > td {display:block;width:100%;}
   .ws-table thead { position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%); }
   .ws-summary { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:6px;align-items:start;padding:3px 0 5px; }
@@ -54,6 +62,7 @@
   .ws-citation strong::after {content:' · ';}
   .ws-mobile-label {display:block;color:var(--muted);font-size:.85rem;line-height:1.05;margin-bottom:1px;}
   .ws-choice select, .ws-choice input:not([type=checkbox]) {font-size:.93rem;min-height:35px;}
+  .ws-summary .ws-comment-cell {grid-column:1/-1;margin-top:5px;}
   .ws-detail-body {padding:9px 10px;}
   .ws-pager {justify-content:center;}
 }
