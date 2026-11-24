@@ -150,3 +150,52 @@ test('PAP : les limites des FT 106 et 1119 restent propres au système document�
   assert.match(options[0].detail,/Si la référence FNP 1118 peut changer.*FT 1119.*FNP 1119/);
   assert.equal(search('ELE 310 FNP 1118 à 50°C').alternatives,undefined);
 });
+
+test('PAP : les fiches de cuve distinguent essais, remise en service et longévité', () => {
+  const primary = search('FNP 1086').results[0];
+  assert.match(primary.detail, /650 µm secs.*diesel à 80 °C.*biodiesel pur à 23 et à 80 °C/);
+  assert.match(primary.detail, /Aucune durée de vie en service chiffrée/);
+  assert.match(primary.detail, /3 jours à 20 °C.*FT produit.*7 jours à 20 °C.*confirmer par Maestria/);
+  assert.ok(primary.links.some(l => l.url === 'https://www.maestria.fr/fiches-techniques/pdf/ant/ant_pdf.php?idx=346'));
+  for (const [n, layers] of [[1094, 'trois couches de 50, 250 et 250 µm'], [1095, 'deux couches de 50 et 500 µm']]) {
+    const card = search('FNP ' + n).results[0];
+    assert.ok(card.detail.includes(layers));
+    assert.match(card.detail, /essais diesel à 23, 50 et 80 °C.*sous PLF, sans durée précisée/i);
+    assert.match(card.detail, /7 jours à 20 °C et 75 %/);
+    assert.doesNotMatch(card.detail, /biodiesel|groupe 304 à/);
+  }
+  assert.doesNotMatch(search('FNP 1166').results[0].detail, /16-001 R15|17-005 R05|17-006 R04/);
+});
+
+test('PAP : les seuils des cuves reposent sur la fiche de chaque système', () => {
+  for (const series of ['ELF', 'PLF']) {
+    for (const group of ['300','301','303']) {
+      const code = series + ' ' + group;
+      assert.deepEqual(titles(search(code + ' à 25 °C')), [code, ...[1086,1094,1095].map(n => 'FNP '+n+' · MAESTRIA')]);
+      assert.deepEqual(titles(search(code + ' à 50 °C')), [code]);
+      assert.equal(search(code + ' à 80 °C').alternatives, undefined);
+    }
+    const hot = series + ' 304';
+    assert.deepEqual(titles(search(hot + ' à 60 °C')), [hot, 'FNP 1086 · MAESTRIA']);
+    for (const t of [50,80]) {
+      const boundary = search(hot + ' à ' + t + ' °C');
+      assert.deepEqual(titles(boundary), [hot]);
+      assert.equal(boundary.alternatives, undefined);
+    }
+  }
+  const newEdition = structuredClone(catalog);
+  newEdition.systemes[1086].indice = 'S007';
+  newEdition.systemes[1094].ft += '?revision=suivante';
+  const changed = createCatalogueSearch(newEdition);
+  assert.deepEqual(titles(changed('ELF 300 à 25 °C')), ['ELF 300','FNP 1095 · MAESTRIA']);
+  const changedCard = changed('FNP 1086').results[0];
+  assert.doesNotMatch(changedCard.detail, /16-001 R15/);
+  assert.ok(!changedCard.links.some(l => l.url.includes('maestria.fr')));
+});
+
+test('PAP : la recherche libre oriente le cas de cuve intérieure vers le dialogue', () => {
+  const inside = search('cuve enterrée gazole intérieur peinture décollée');
+  assert.match(inside.message, /Solliciter le Peintre/);
+  assert.equal(inside.total, 0);
+  assert.doesNotMatch(search('paroi extérieure de cuve gazole').message, /Solliciter le Peintre/);
+});

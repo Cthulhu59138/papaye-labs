@@ -79,6 +79,18 @@ function hasReviewed106(data,c) {
 function temperatureEvidence(data, c, systems, t) {
   const group = data.groupes[c.groupe];
   if (t === undefined) return {state:'unfiltered',systems};
+  if (['ELF', 'PLF'].includes(c.serie) && ['300', '301', '303', '304'].includes(c.groupe)) {
+    const hot = c.groupe === '304';
+    const documented = systems.filter(num => reviewedTankSystem(data, num) && (!hot || num === 1086));
+    const within = hot ? 50 < t && t < 80 : t < 50;
+    const candidates = within ? documented : [];
+    return {
+      state: candidates.length ? 'ft' : 'unknown',
+      systems: candidates,
+      note: documented.length ? 'Plage documentée pour ' + documented.map(n => 'FNP ' + n).join(', ') +
+        (hot ? ' : 50 °C < T < 80 °C.' : ' : T < 50 °C.') : ''
+    };
+  }
   const interval = group.temperature;
   let matches;
   if (interval.startsWith('10 °C < T < 60')) matches = 10 < t && t < 60;
@@ -116,15 +128,47 @@ function codeCard(data,c,ns=c.fnp) {
   return {title:codeOf(c),detail:join(details),links};
 }
 
+const EPODUR_PRODUCT_SHEET = 'https://www.maestria.fr/fiches-techniques/pdf/ant/ant_pdf.php?idx=346';
+const IM209_DIESEL = 'Pour les hydrocarbures sur métal ferreux, la fiche associe ELF (entretien) et PLF (neuf) aux groupes 300, 301 et 303, à T < 50 °C. Les essais diesel à 23, 50 et 80 °C sont rapportés sous PLF, sans durée précisée. Sur acier nu, préparation Sa 2½. Avant mise en service, la FT indique 7 jours à 20 °C et 75 % d’humidité relative. La durée de vie du revêtement en service reste à établir pour le carburant et la cuve concernés.';
+const TANK_SYSTEM_REVIEWS = {
+  1086: {
+    ft: 'https://fnp.edf.fr/fr/ficheconstitutive/download/40115',
+    indice: 'S006',
+    detail: 'FT 16-001 R15, p. 1–3. EPODUX 292 (50 µm) et EPODUR NV 75-25 (600 µm), soit 650 µm secs. Sur métal ferreux au contact des hydrocarbures, ELF en entretien ou PLF en neuf, groupes 300, 301 et 303 à T < 50 °C, groupe 304 à 50 °C < T < 80 °C. Essais d’immersion totale d’un mois dans le diesel à 80 °C et dans le biodiesel pur à 23 et à 80 °C. Aucune durée de vie en service chiffrée. Sur acier nu, préparation Sa 2½. Avant mise en service, la FT système indique 3 jours à 20 °C et 75 % d’humidité relative. La FT produit EPODUR de janvier 2026 (p. 1–2) indique 7 jours à 20 °C pour 600 µm. Faire confirmer par Maestria le délai avant remplissage et la compatibilité avec le carburant exact. Le fabricant demande à être consulté pour un stockage hors température ambiante.',
+    productSheet: EPODUR_PRODUCT_SHEET
+  },
+  1094: {
+    ft: 'https://fnp.edf.fr/fr/ficheconstitutive/download/26152',
+    indice: 'S003',
+    detail: 'FT 17-005 R05, p. 2–3. EPODUX IM 209 en trois couches de 50, 250 et 250 µm, soit 550 µm secs. ' + IM209_DIESEL
+  },
+  1095: {
+    ft: 'https://fnp.edf.fr/fr/ficheconstitutive/download/22434',
+    indice: 'S004',
+    detail: 'FT 17-006 R04, p. 2–3. EPODUX IM 209 en deux couches de 50 et 500 µm, soit 550 µm secs. ' + IM209_DIESEL
+  }
+};
+
+function reviewedTankSystem(data, num) {
+  const system = data.systemes[num];
+  const review = TANK_SYSTEM_REVIEWS[num];
+  if (review && system.ft === review.ft && system.indice === review.indice) return review;
+}
+
 function systemCard(data,num,usageCodes,matchNames=[]) {
   const s=data.systemes[num];
   const names=matchNames.length ? matchNames : [...new Set(s.produits.map(p=>p.nom))];
   const details=['Indice '+s.indice+' du '+s.revision,s.equipement,
     'Produits cités : '+names.join(', ')+'.'];
+  const links = [link('Fiche système',s.fiche),link('Fiche technique FR',s.ft)];
+  const review = reviewedTankSystem(data, num);
+  if (review) {
+    details.push(review.detail);
+    if (review.productSheet) links.push(link('FT produit EPODUR NV 75-25 (janvier 2026)', review.productSheet));
+  }
   if (Number(num) === 106 && s.ft === FT_106) details.push(FT_106_NOTE);
   if(usageCodes?.length) details.push('Couples associés : '+usageCodes.join(', ')+'.');
-  return {title:'FNP '+num+' · '+s.societe,detail:join(details),
-    links:[link('Fiche système',s.fiche),link('Fiche technique FR',s.ft)]};
+  return {title:'FNP '+num+' · '+s.societe, detail:join(details), links};
 }
 
 const MAX_ALTERNATIVES = 2;
@@ -286,7 +330,8 @@ function showCode(data,c,t,num,remaining) {
   const cards=systems.slice(0,MAX_RESULTS-1).map(n=>systemCard(data,n));
   const status=systems.length ? systems.length+' système(s) associé(s) à examiner. La fiche technique et le commentaire du système précisent les conditions.' : 'Aucun système publié associé à ce couple.';
   const extra=remaining ? ' La recherche par code ne vérifie pas les autres contraintes rédigées dans votre question.' : '';
-  const info=proof.state==='ft' ? ' Seul le seuil documenté pour le FNP '+systems[0]+' est utilisé ici. ' + (proof.note || '') : '';
+  const info = proof.state === 'ft'
+    ? ' ' + (proof.note || 'Seul le seuil documenté pour le FNP '+systems[0]+' est utilisé ici.') : '';
   const response = answer(code+' — '+status+info+extra,[header,...cards],systems.length+1);
   if (!systems.length && num === undefined && !remaining) {
     const alternatives = findAlternatives(data,c,t);
@@ -391,6 +436,10 @@ export function createCatalogueSearch(data) {
     }
     if (!matches.length && !alternatives.length) alternatives.push(...hotSteelOptions(data,terms,tokens,temperature.t));
     if (!matches.length) {
+      if (!alternatives.length && /\b(cuve|reservoir|citerne)s?\b/.test(text)
+        && tokens.includes('interieur') && /\b(gazole|gasoil|gas-oil|diesel|fioul|fuel|hydrocarbures?)\b/.test(text)) {
+        return answer('Pour la paroi intérieure au contact du carburant, précisez le matériau, le carburant exact et sa température maximale. En cas de décollement, utilisez « Solliciter le Peintre » pour examiner les constats et les fiches adaptés à votre situation.');
+      }
       const prompt = alternatives.length ? '' : ' ' + EMPTY_HELP;
       return withAlternatives(answer('Aucune correspondance sur tous les mots et seuils saisis.' + prompt), alternatives);
     }
