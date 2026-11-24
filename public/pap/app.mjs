@@ -116,7 +116,7 @@ function readableError(error) {
 function addMessage({ source, message }) {
   if (!message || !["user","ai"].includes(source)) return;
   const item = element("li");
-  item.append(element("strong", source === "user" ? "Toi" : "DMP"), document.createTextNode(message));
+  item.append(element("strong", source === "user" ? "Toi" : "PAP"), document.createTextNode(message));
   $("messages").prepend(item);
   $("transcription").hidden = false;
 }
@@ -142,7 +142,7 @@ async function startCall() {
   const version = ++callVersion;
   const current = () => version === callVersion;
   let mode = "listening";
-  const reportMode = () => setCallState("active", mode === "speaking" ? "DMP te répond…" : "À toi de parler.");
+  const reportMode = () => setCallState("active", mode === "speaking" ? "PAP te répond…" : "À toi de parler.");
   setCallState("connecting", "Connexion à ElevenLabs. Autorise le micro si ton navigateur le demande.");
   timeout = setTimeout(() => { void closeCall(version,"Le délai de connexion est dépassé. Vérifie le micro et la connexion, puis réessaie."); }, 45000);
   try {
