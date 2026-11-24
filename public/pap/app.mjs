@@ -75,6 +75,19 @@ for (const button of document.querySelectorAll("[data-query]")) {
   button.addEventListener("click", () => { void runSearch(button.dataset.query); });
 }
 
+let lastSelection = '';
+
+function shareSelection() {
+  if (!activeCall) return;
+  const number = $('candidats').querySelector('details[open]')?.dataset.fnp;
+  const selection = number ? $('serie').value + ' ' + $('groupe').value + ', FNP ' + number : '';
+  if (selection === lastSelection) return;
+  activeCall.sendContextualUpdate(selection ? 'Fiche ouverte dans le tableau : ' + selection : 'La fiche du tableau a été refermée.');
+  lastSelection = selection;
+}
+
+$('candidats').addEventListener('selection-fnp', shareSelection);
+
 function loadSdk() {
   if (window.ElevenLabsClient?.Conversation) return Promise.resolve(window.ElevenLabsClient);
   if (!sdkPromise) {
@@ -178,6 +191,8 @@ async function startCall() {
     if (!current()) { await call.endSession(); return; }
     clearTimeout(timeout);
     activeCall = call;
+    lastSelection = '';
+    shareSelection();
     reportMode();
   } catch (error) {
     await closeCall(version,readableError(error));

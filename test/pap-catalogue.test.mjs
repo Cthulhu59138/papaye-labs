@@ -133,18 +133,19 @@ test('PAP : les pistes pour acier chaud indiquent le seuil et la préparation à
 });
 
 test('PAP : les limites des FT 106 et 1119 restent propres au système documenté', () => {
-  for (const t of [200,500]) {
-    const reply = search('EIA 105 à '+t+'°C');
-    assert.deepEqual(titles(reply),['EIA 105','FNP 106 · GEHOLIT']);
-    assert.match(reply.message,/500 °C en service continu/);
-  }
+  const at200 = search('EIA 105 à 200°C');
+  for (const n of [106,1108,1110]) assert.ok(at200.results.some(row => row.title.startsWith('FNP '+n+' ·')));
+  assert.ok(titles(search('PIC 105 FNP 1162 à 350 °C')).includes('FNP 1162 · MAESTRIA'));
+  assert.ok(!titles(search('PIC 105 FNP 1162 à 350 °C en continu')).includes('FNP 1162 · MAESTRIA'));
+  assert.deepEqual(titles(search('EIA 105 à 500°C')),['EIA 105','FNP 106 · GEHOLIT']);
   const above = search('EIA 105 à 501°C');
-  assert.match(above.message,/maximum de 500 °C/);
+  assert.match(above.message,/ne permet pas/);
+  assert.match(above.message,/FNP 106 : T ≤ 500 °C/);
   assert.equal(above.alternatives,undefined);
   assert.match(search('FNP 106 à 501°C').message,/dépasse sa limite/);
   assert.equal(search('acier brut intérieur peu corrosif entretien 501 °C').alternatives,undefined);
-  assert.match(search('EIA 105 FNP 1108 à 200°C').message,/ne permet pas/);
-  assert.equal(search('EEA 205 à 200°C').results.length,1);
+  assert.ok(titles(search('EIA 105 FNP 1108 à 200°C')).includes('FNP 1108 · PPG'));
+  assert.ok(titles(search('EEA 205 à 200°C')).includes('FNP 1141 · JOTUN'));
   const options=search('ELE 310 FNP 1118 à 20°C').alternatives;
   assert.equal(options.length,1);
   assert.match(options[0].detail,/Si la référence FNP 1118 peut changer.*FT 1119.*FNP 1119/);
@@ -198,4 +199,38 @@ test('PAP : la recherche libre oriente le cas de cuve intérieure vers le dialog
   assert.match(inside.message, /Solliciter le Peintre/);
   assert.equal(inside.total, 0);
   assert.doesNotMatch(search('paroi extérieure de cuve gazole').message, /Solliciter le Peintre/);
+});
+
+test('PAP : vocabulaire des ouvrages, de la matière et de la température de la pièce', () => {
+  assert.match(search('bâche').message, /fluide.*face/);
+  assert.deepEqual(search('bâche enterrée gazole intérieur peinture décollée'),search('cuve enterrée gazole intérieur peinture décollée'));
+  for (const matière of ['acier noir','acier carbone','acier au carbone']) {
+    assert.deepEqual(search(matière+' intérieur sec peu corrosif entretien 200 °C').alternatives?.map(a=>a.title),['EIA 105']);
+    assert.ok(!search(matière).results.some(item=>item.detail.includes('Acier inoxydable')));
+  }
+  assert.match(search('support de tuyauterie en acier carbone, fluide à 500 °C').message,/surface du support mécanique/);
+  assert.match(search('bâche intérieure pour effluents radioactifs').message,/ELJ.*PLJ/);
+  assert.match(search('pollution radiologique').message,/décontaminabilité.*irradiation.*accidentelles/);
+});
+
+test('PAP : chaleur, régime et qualifications propres au système ouvert', () => {
+  assert.ok(titles(search('EEA 205 à 399°C')).some(t=>t.startsWith('FNP 1139')));
+  assert.deepEqual(titles(search('EEA 205 à 400°C')),['EEA 205','FNP 1141 · JOTUN']);
+  assert.deepEqual(titles(search('EEA 205 à 650°C')),['EEA 205','FNP 1141 · JOTUN']);
+  assert.equal(search('EEA 205 à 651°C').results.length,1);
+  assert.match(search('FNP 1141 à 700°C').message,/Aucune plage/);
+  assert.match(search('FNP 1110').results[0].detail,/250 °C.*72 h.*300 °C.*48 h/);
+  assert.match(search('FNP 1162').results[0].detail,/RRC-A/);
+  assert.match(search('FNP 1162').results[0].detail,/RRC-B/);
+  assert.match(search('FNP 1086').results[0].detail,/RIS.{0,4}EAS/);
+});
+
+test('PAP : une extension de notice reste distincte du tableau et de la qualification accidentelle', () => {
+  const uv = search('PID 105 FNP 1140');
+  assert.match(uv.message, /notice.*sous conditions/i);
+  assert.deepEqual(titles(uv), ['FNP 1140 · JOTUN']);
+  assert.match(uv.results[0].detail, /à l’abri des UV/);
+  assert.equal(uv.alternatives, undefined);
+  assert.match(search('PIC 105 FNP 1162 à 350 °C RRC-B').message,/ne démontre pas.*RRC-B/);
+  assert.match(search('PIC 105 à 350 °C accident grave').message,/Indiquez le système/);
 });

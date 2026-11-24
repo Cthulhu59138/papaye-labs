@@ -121,3 +121,7 @@ footer { border-top:1px solid var(--line); padding:20px 0 26px; display:flex; ju
 .alternatives:not([hidden]) { margin-top:20px; }
 .alternatives > h3 { margin-bottom:10px; }
 .alternatives ul { list-style:none; padding:0; }
+
+.candidates details { margin-top: .4em; }
+.candidates summary { cursor: pointer; color: var(--rust); }
+.candidates details p { margin: .5em 0; }
