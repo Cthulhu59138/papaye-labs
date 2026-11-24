@@ -6,6 +6,8 @@ if(endpoint.protocol!=='https:'||endpoint.username||endpoint.password||endpoint.
 await rm('dist',{recursive:true,force:true});
 await mkdir('dist',{recursive:true});
 await cp('public','dist',{recursive:true,filter:source=>!['catalog-ui.mjs','catalog.mjs'].includes(source.split('/').at(-1))});
+// Keep previously shared downloads and assets available at their original addresses.
+await cp('public/pap','dist/dmp',{recursive:true,filter:source=>source!=='public/pap/index.html'});
 await writeFile('dist/portal.config.json',JSON.stringify({apiBase:endpoint.origin})+'\n');
 await writeFile('dist/.nojekyll','');
 console.log('Papaye Labs : tableau de bord authentifié et applications autonomes.');

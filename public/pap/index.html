@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Conseiller vocal et recherche des systèmes de peinture du catalogue FNP.">
+  <title>PAP · Papaye Assistant Peinture | Papaye Labs</title>
+  <link rel="canonical" href="https://papaye-labs.fr/pap/">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./guide.mjs"></script>
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <header class="mast">
+    <a class="brand" href="/" aria-label="Accueil Papaye Labs"><span class="brand-sign" aria-hidden="true">p.</span> Papaye Labs</a>
+    <nav aria-label="Navigation"><a href="#tableau">Tableau FNP</a><a href="#recherche">Recherche FNP</a><a href="https://fnp.edf.fr/fr/fnp/list" target="_blank" rel="noopener noreferrer">Catalogue FNP <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main>
+    <section class="studio" aria-labelledby="titre">
+      <div class="studio-copy">
+        <p class="project-name"><abbr title="Papaye Assistant Peinture">PAP</abbr> <span></span> Papaye Assistant Peinture</p>
+        <h1 id="titre">Conseiller<br><em>peinture.</em></h1>
+        <p class="intro">Décris le support, son environnement et la protection recherchée. PAP t’aide à choisir parmi les systèmes de peinture du catalogue FNP.</p>
+        <button class="voice-button" id="call" type="button" aria-describedby="micro-note" disabled>
+          <span class="voice-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span id="call-label">Solliciter le Peintre</span>
+        </button>
+        <p id="call-status" class="call-status" role="status"></p>
+        <p class="micro-note" id="micro-note">Le mode vocal transmet tes paroles à ElevenLabs. Utilise un cas anonymisé.</p>
+      </div>
+      <img class="painter" src="./papaye-peintre.webp" width="1200" height="800" alt="Papaye peintre en combinaison blanche, un nuancier à la main.">
+    </section>
+    <section id="transcription" class="transcription" hidden>
+      <details open><summary>Transcription de l’échange</summary><ol id="messages" reversed aria-label="Messages du plus récent au plus ancien"></ol></details>
+    </section>
+    <section class="catalogue guide" id="tableau" aria-labelledby="guide-title">
+      <div class="guide-heading">
+        <div class="heading"><h2 id="guide-title">Choisir un système de peinture</h2><p>Choisis une série selon les travaux et le milieu, puis un groupe selon la surface à protéger.</p></div>
+        <a class="download" href="./Peintures_FNP.xlsx" download>Télécharger le tableau Excel <span aria-hidden="true">↓</span></a>
+      </div>
+      <fieldset class="guide-step">
+        <legend>Série · Travaux et milieu</legend>
+        <div class="guide-fields">
+          <div><label for="travaux">Type de travaux</label><select id="travaux" disabled><option>Tous les travaux</option></select></div>
+          <div><label for="famille">Milieu ou ouvrage</label><select id="famille" disabled><option>Tous les milieux et ouvrages</option></select></div>
+          <div class="wide"><label for="serie">Série</label><select id="serie" disabled><option>Choisir une série</option></select></div>
+        </div>
+        <p class="choice-detail" id="serie-detail"></p>
+      </fieldset>
+      <fieldset class="guide-step" id="group-step" disabled>
+        <legend>Groupe · Support et protection</legend>
+        <div class="guide-fields">
+          <div class="wide"><label for="support">Matériau ou support</label><select id="support"><option>Tous les supports</option></select></div>
+          <div class="wide"><label for="groupe">Groupe</label><select id="groupe"><option>Choisir d’abord une série</option></select></div>
+        </div>
+        <div id="group-detail"></div>
+      </fieldset>
+      <p id="guide-status" class="guide-status" role="status"></p>
+      <button id="guide-retry" class="guide-retry" type="button" hidden>Réessayer le chargement</button>
+      <table class="candidates" id="candidats" hidden>
+        <caption class="sr-only">Systèmes de peinture associés au couple série et groupe</caption>
+        <thead><tr><th scope="col">Fiche système</th><th scope="col">Fournisseur</th><th scope="col">Produits du système</th><th scope="col">Document</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <noscript>Active JavaScript pour choisir une série et un groupe, ou télécharge le tableau Excel ci-dessus.</noscript>
+    </section>
+    <section class="catalogue" id="recherche" aria-labelledby="search-title">
+      <div class="heading"><h2 id="search-title">Rechercher dans le FNP</h2><p>Retrouve les usages et les fiches techniques d’un système.</p></div>
+      <form id="search-form" role="search">
+        <label for="query">Code, numéro FNP, nom de produit ou usage</label>
+        <div class="search-controls"><input id="query" name="q" type="search" autocapitalize="off" placeholder="Ex. EIA 151, FNP 1119, acier galvanisé…" required maxlength="500"><button type="submit">Rechercher <span aria-hidden="true">→</span></button></div>
+      </form>
+      <div class="examples" aria-label="Exemples de recherche"><span>Essayer</span><button type="button" data-query="EEA 200">EEA 200</button><button type="button" data-query="FNP 1119">FNP 1119</button><button type="button" data-query="acier galvanisé">Acier galvanisé</button></div>
+      <noscript>Active JavaScript pour utiliser la voix et la recherche. Tu peux aussi <a href="https://fnp.edf.fr/fr/codification/list">consulter les codifications FNP</a>.</noscript>
+      <div id="search-feedback" class="search-feedback" role="status"></div>
+      <ol id="results" class="results" aria-label="Résultats de recherche"></ol>
+    </section>
+  </main>
+  <footer><span>Référentiel FNP du 24 novembre 2026</span><a href="https://fnp.edf.fr/fr/codification/list" target="_blank" rel="noopener noreferrer">Codifications FNP <span aria-hidden="true">↗</span></a></footer>
+</body>
+</html>

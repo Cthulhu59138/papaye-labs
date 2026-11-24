@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {createCatalogueSearch} from '../public/dmp/catalogue.mjs';
+import {createCatalogueSearch} from '../public/pap/catalogue.mjs';
 
-const catalog = JSON.parse(await readFile(new URL('../public/dmp/catalogue.json',import.meta.url)));
+const catalog = JSON.parse(await readFile(new URL('../public/pap/catalogue.json',import.meta.url)));
 const search = createCatalogueSearch(catalog);
 const pair = text => catalog.couples.find(c=>c.serie+' '+c.groupe===text);
 const titles = result => result.results.map(item=>item.title);
 
-test('DMP : intégrité des couples, associations, produits et documents officiels',()=>{
+test('PAP : intégrité des couples, associations, produits et documents officiels',()=>{
   const codes=new Set(catalog.couples.map(c=>c.serie+' '+c.groupe));
   assert.equal(codes.size,934);
   assert.equal(Object.keys(catalog.series).length,69);
@@ -30,14 +30,14 @@ test('DMP : intégrité des couples, associations, produits et documents officie
   }
 });
 
-test('DMP : les libellés publics utilisent le vocabulaire du catalogue FNP', () => {
+test('PAP : les libellés publics utilisent le vocabulaire du catalogue FNP', () => {
   const visibleText = JSON.stringify(catalog, (key, value) =>
     typeof value === 'string' && value.startsWith('https://') ? undefined : value
   );
   assert.doesNotMatch(visibleText, /\bEDF\b|électricité de france/i);
 });
 
-test('DMP : les codes et numéros exacts préservent la source, les zéros et les absences',()=>{
+test('PAP : les codes et numéros exacts préservent la source, les zéros et les absences',()=>{
   assert.equal(search('eea200').results[0].title,'EEA 200');
   assert.ok(pair('EEA 200').fnp.every(n=>search('EEA-200').results[0].detail.includes(String(n))));
   assert.equal(search('PTC010').results[0].title,'PTC 010');
@@ -55,7 +55,7 @@ test('DMP : les codes et numéros exacts préservent la source, les zéros et le
   assert.ok(titles(search('EPODUR NV 75-25')).some(t=>t.startsWith('FNP 1119')));
 });
 
-test('DMP : seuils stricts, limites incluses, libellés tronqués et divergence 154',()=>{
+test('PAP : seuils stricts, limites incluses, libellés tronqués et divergence 154',()=>{
   assert.match(search('EEA 200 à 60 °C').message,/16 système/);
   assert.match(search('EEA 200 à 60,1°C').message,/hors de la plage/);
   assert.match(search('PTC 010 à 10°C').message,/hors de la plage/);
@@ -74,7 +74,7 @@ test('DMP : seuils stricts, limites incluses, libellés tronqués et divergence 
   assert.match(search('acier entre 60 et 120°C').message,/intervalle/);
 });
 
-test('DMP : recherche multi-critères sans extrapoler les seuils ni confondre les milieux',()=>{
+test('PAP : recherche multi-critères sans extrapoler les seuils ni confondre les milieux',()=>{
   assert.ok(titles(search('entretien, acier brut extérieur à 40°C')).includes('EEA 200'));
   assert.equal(search('entretien acier brut extérieur à 70°C').total,0);
   assert.ok(titles(search('mur intérieur béton lessivable')).includes('EIA 151'));
@@ -85,7 +85,7 @@ test('DMP : recherche multi-critères sans extrapoler les seuils ni confondre le
   assert.ok(titles(search('entretien intérieur vapeurs acides béton lessivable')).every(x=>!x.startsWith('EIA')));
 });
 
-test('DMP : les produits MAT avec numéro restent des noms commerciaux',()=> {
+test('PAP : les produits MAT avec numéro restent des noms commerciaux',()=> {
   assert.ok(titles(search('MAT 450')).some(t=>t.startsWith('FNP 1112')));
   assert.ok(titles(search('MAT 300')).some(t=>t.startsWith('FNP 1149')));
 });
