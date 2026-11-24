@@ -16,7 +16,6 @@ nav a,footer a { text-decoration:none; }
 .studio { display:grid; grid-template-columns:minmax(0,1.12fr) minmax(280px,.88fr); align-items:center; padding:clamp(40px,5.9vw,76px) clamp(0px,3vw,43px) clamp(40px,4.9vw,64px); gap:20px; position:relative; isolation:isolate; }
 .project-name { display:flex; align-items:center; gap:10px; margin:0 0 20px; color:var(--muted); font-size:14px; font-weight:650; }
 .project-name abbr { color:var(--rust); font-weight:800; letter-spacing:.1em; text-decoration:none; }
-.project-name span { width:23px; border-top:1px solid #8d9d8f; }
 h1,h2,h3,p { margin:0; }
 h1,h2 { font-family:"Instrument Serif","Iowan Old Style",Georgia,serif; font-weight:500; }
 h1 { font-size:clamp(65px,7.8vw,110px); letter-spacing:-.079em; line-height:.86; }
