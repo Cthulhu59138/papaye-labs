@@ -100,7 +100,7 @@ function setCallState(state, message) {
   document.body.dataset.call = state;
   $("call-status").textContent = message;
   $("call-label").textContent = {
-    idle:"Parler à DMP", connecting:"Annuler la connexion", active:"Terminer l’échange", stopping:"Fermeture…"
+    idle:"Solliciter le Peintre", connecting:"Annuler la connexion", active:"Terminer l’échange", stopping:"Fermeture…"
   }[state];
   callButton.disabled = state === "stopping";
 }
@@ -117,7 +117,7 @@ function addMessage({ source, message }) {
   if (!message || !["user","ai"].includes(source)) return;
   const item = element("li");
   item.append(element("strong", source === "user" ? "Toi" : "DMP"), document.createTextNode(message));
-  $("messages").append(item);
+  $("messages").prepend(item);
   $("transcription").hidden = false;
 }
 
