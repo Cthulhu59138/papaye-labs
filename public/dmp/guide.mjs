@@ -102,7 +102,7 @@ function describeGroup(couple) {
     if (item.complement) note.append(' ', source('Consulter la fiche citée', item.complement));
     groupDetail.append(note);
   }
-  groupDetail.append(source('Codification EDF ' + couple.serie + ' ' + couple.groupe, couple.url));
+  groupDetail.append(source('Codification ' + couple.serie + ' ' + couple.groupe, couple.url));
 }
 
 function candidateRow(number) {
@@ -132,7 +132,7 @@ function showCandidates() {
   const count = couple.fnp.length;
   const code = couple.serie + ' ' + couple.groupe;
   if (!count) {
-    status.textContent = 'Aucun système publié associé à ' + code + ' dans ce relevé EDF.';
+    status.textContent = 'Aucun système publié associé à ' + code + ' dans ce relevé.';
     return;
   }
   status.textContent = count + (count === 1 ? ' système candidat pour ' : ' systèmes candidats pour ') + code + '.';

@@ -30,6 +30,13 @@ test('DMP : intégrité des couples, associations, produits et documents officie
   }
 });
 
+test('DMP : les libellés publics utilisent le vocabulaire du catalogue FNP', () => {
+  const visibleText = JSON.stringify(catalog, (key, value) =>
+    typeof value === 'string' && value.startsWith('https://') ? undefined : value
+  );
+  assert.doesNotMatch(visibleText, /\bEDF\b|électricité de france/i);
+});
+
 test('DMP : les codes et numéros exacts préservent la source, les zéros et les absences',()=>{
   assert.equal(search('eea200').results[0].title,'EEA 200');
   assert.ok(pair('EEA 200').fnp.every(n=>search('EEA-200').results[0].detail.includes(String(n))));
@@ -54,7 +61,7 @@ test('DMP : seuils stricts, limites incluses, libellés tronqués et divergence 
   assert.match(search('PTC 010 à 10°C').message,/hors de la plage/);
   assert.match(search('EEA 204 à 120°C').message,/système\(s\)/);
   assert.match(search('PEA 205 à 120°C').message,/hors de la plage/);
-  assert.match(search('EIA 154').results[0].detail,/Divergence EDF.*sols/);
+  assert.match(search('EIA 154').results[0].detail,/Divergence entre le groupe et la fiche technique.*sols/);
   assert.match(search('EIA 154 à 30°C').message,/ne permet pas/);
   assert.match(search('PLE 310').results[0].detail,/1118, 1119/);
   assert.match(search('PLE310 à 49°C').message,/Seul le seuil documenté pour le FNP 1119/);

@@ -1,6 +1,6 @@
-// Instantané documentaire local. Les résultats restent liés aux fiches EDF.
+// Instantané documentaire local. Les résultats restent liés aux fiches du catalogue.
 const MAX_RESULTS = 6;
-const EMPTY_HELP = 'Précisez le support, son état, le milieu, les travaux et la température de surface en service, ou indiquez un code EDF, un numéro FNP ou un produit.';
+const EMPTY_HELP = 'Précisez le support, son état, le milieu, les travaux et la température de surface en service, ou indiquez un code série–groupe, un numéro FNP ou un produit.';
 const LIST_URL = 'https://fnp.edf.fr/fr/codification/list';
 const SYSTEM_URL = 'https://fnp.edf.fr/fr/fnp/list';
 const STOP = new Set(('a au aux avec ce cet cette chez comment contre d dans de des du en est et faire faut fiche fiches fnp groupe il j je l la le les ma me meilleur meilleure mes mon n ne notre nous ou par peindre peinture peintures pour peut peux quelle quelles quel quels que qui qu recherche rechercher reference references s se serie ses souhaitez souhaite suggerer sur systeme systemes t travaux trouver un une utiliser utilise utilisable voudrais veux y °c celsius temperature degres surface surfaces support supports convient conviendrait conseiller conseille besoin type couche application mettre choisir appliquer protege proteger peux tu doit comme vous numero documentee').split(' '));
@@ -94,7 +94,7 @@ function temperatureEvidence(group, systems, t) {
 function codeCard(data,c,ns=c.fnp) {
   const s=data.series[c.serie], g=data.groupes[c.groupe];
   const details=[s.travaux,s.milieu,c.support || g.support,g.etat,g.fonction,g.temperature,g.reserve];
-  const links=[link('Codification EDF',c.url)];
+  const links=[link('Codification FNP',c.url)];
   if(g.complement) links.push(link('Fiche citée dans la précision',g.complement));
   if(ns.length) links.push(link('FT du FNP '+ns[0],data.systemes[ns[0]].ft));
   details.push(ns.length ? 'FNP associés à examiner : '+listNums(ns)+'.' : c.fnp.length ? '' : 'Aucun système publié associé dans le relevé.');
@@ -108,7 +108,7 @@ function systemCard(data,num,usageCodes,matchNames=[]) {
     'Produits cités : '+names.join(', ')+'.'];
   if(usageCodes?.length) details.push('Couples associés : '+usageCodes.join(', ')+'.');
   return {title:'FNP '+num+' · '+s.societe,detail:join(details),
-    links:[link('Fiche système EDF',s.fiche),link('Fiche technique FR',s.ft)]};
+    links:[link('Fiche système',s.fiche),link('Fiche technique FR',s.ft)]};
 }
 
 function showCode(data,c,t,num,remaining) {
@@ -121,7 +121,7 @@ function showCode(data,c,t,num,remaining) {
   if(proof.state==='unknown') return answer('Le catalogue ne permet pas de retenir un système pour '+code+' à '+t+' °C. Vérifiez les conditions propres à la FT.',[header]);
   const systems=proof.systems;
   const cards=systems.slice(0,MAX_RESULTS-1).map(n=>systemCard(data,n));
-  const status=systems.length ? systems.length+' système(s) EDF associé(s) à examiner. La fiche technique et le commentaire EDF précisent les conditions.' : 'Aucun système publié associé à ce couple.';
+  const status=systems.length ? systems.length+' système(s) associé(s) à examiner. La fiche technique et le commentaire du système précisent les conditions.' : 'Aucun système publié associé à ce couple.';
   const extra=remaining ? ' La recherche par code ne vérifie pas les autres contraintes rédigées dans votre question.' : '';
   const info=proof.state==='ft' ? ' Seul le seuil documenté pour le FNP '+systems[0]+' est utilisé ici.' : '';
   return answer(code+' — '+status+info+extra,[header,...cards],systems.length+1);
@@ -143,7 +143,7 @@ export function createCatalogueSearch(data) {
   }
   return function search(query) {
     if(typeof query!=='string' || !query.trim()) return answer(EMPTY_HELP);
-    if(query.length>700) return answer('Résumez la recherche en indiquant le support, le milieu et la température, ou un identifiant EDF.');
+    if(query.length>700) return answer('Résumez la recherche en indiquant le support, le milieu et la température, ou un code du catalogue.');
     const temperature=requestedTemperature(query);
     if(temperature.error) return answer(temperature.error);
     let text=fold(temperature.rest).trim();
@@ -159,7 +159,7 @@ export function createCatalogueSearch(data) {
     if(codeMatches.length>1) return answer('Examinez une codification à la fois pour conserver ses propres conditions et systèmes.');
     if(codeMatches.length){
       const m=codeMatches[0], code=m[1].toUpperCase()+' '+m[2], c=byCode.get(code);
-      if(!c) return answer('Le couple '+code+' est absent du relevé EDF du '+data.date+'.');
+      if(!c) return answer('Le couple '+code+' est absent du relevé du '+data.date+'.');
       return showCode(data,c,temperature.t,num,searchTerms(text.replace(m[0],' ')).length>0);
     }
     if(num!==undefined){
@@ -195,7 +195,7 @@ export function createCatalogueSearch(data) {
       }
     }
     if(products.length && temperature.t===undefined) return answer(products.length+' système(s) où figurent ce nom commercial ou ce fournisseur : '+listNums(productSystems)+'. Recherchez un numéro FNP pour ouvrir sa fiche et vérifier le couple concerné.',products.slice(0,MAX_RESULTS),products.length);
-    if(possibleUnknown) return answer('Ce code ou nom commercial est absent du relevé EDF du '+data.date+'.');
+    if(possibleUnknown) return answer('Ce code ou nom commercial est absent du relevé du '+data.date+'.');
     const matches=[];
     for(const c of data.couples){
       if(!tokens.every(t=>terms.get(c).has(t))) continue;
@@ -232,5 +232,5 @@ export async function searchCatalogue(query) {
     search ??= createCatalogueSearch(data);
     return search(query);
   }
-  catch {return answer('Le référentiel local est momentanément indisponible.',[{title:'Sources EDF',detail:'Consultez le catalogue officiel ou réessayez.',links:[link('Codifications',LIST_URL),link('Systèmes publiés',SYSTEM_URL)]}]);}
+  catch {return answer('Le référentiel local est momentanément indisponible.',[{title:'Sources du catalogue',detail:'Consultez le catalogue officiel ou réessayez.',links:[link('Codifications',LIST_URL),link('Systèmes publiés',SYSTEM_URL)]}]);}
 }
