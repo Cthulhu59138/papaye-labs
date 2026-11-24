@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {filterWorksheet,worksheetFilters,worksheetMarkup} from '../public/dashboard-worksheet.mjs';
+import {filterWorksheet,worksheetFilters,worksheetMarkup,worksheetPage,worksheetViewState,restoreWorksheetView} from '../public/dashboard-worksheet.mjs';
 import {createWorksheetEdits} from '../public/dashboard-worksheet-edits.mjs';
 
 const template={subject:'Contrôler la conduite',description:'Essai de démonstration',code:'Code A',articles:'§ 18',support:'Fiche',family:'Contrôle',pages:'3',revision:1,status:'',priority:'',decision:'',comment:''};
@@ -15,20 +15,26 @@ test('Les filtres cumulent recherche, code, statut, priorité et décision perso
   assert.deepEqual(filterWorksheet(rows,{...worksheetFilters(),query:'autre piste'}),[rows[3]]);
   assert.match(worksheetMarkup(sheet,{...worksheetFilters(),decision:'Choix retiré'}),/value="Choix retiré" selected/);
 });
-test('La liste présente six colonnes et les trois choix dès la première vue',()=>{
+test('Les sept colonnes comprennent un commentaire multiligne par sujet, visible sans déplier',()=>{
   const html=worksheetMarkup(sheet,worksheetFilters());
-  assert.deepEqual([...html.matchAll(/<th scope="col">([^<]+)<\/th>/g)].map(match=>match[1]),['Sujet','Détails','Code et paragraphe','Statut','Décision','Priorité']);
+  assert.deepEqual([...html.matchAll(/<th scope="col">([^<]+)<\/th>/g)].map(match=>match[1]),['Sujet','Détails','Code et paragraphe','Statut','Décision','Priorité','Commentaire libre']);
   assert.match(html,/§ 18/);assert.doesNotMatch(html,/Essai de démonstration|ws-detail-body|Modifier le suivi/);
   assert.match(html,/<input type="text" list="ws-decision-suggestions"[^>]+value="Une autre piste"/);
+  assert.equal((html.match(/<textarea /g)||[]).length,12);
+  assert.match(html,/<textarea id="ws-comment-7"[^>]*aria-label="Commentaire libre pour Contrôler la conduite"[^>]*>\nà revoir<\/textarea>/);
   for(const field of ['status','decision','priority'])assert.match(html,new RegExp('data-ws-field="'+field+'"'));
 });
-test('Le détail unique permet de commenter et les projets archivés restent en lecture seule',()=>{
+test('Le détail reste unique et les commentaires des projets archivés sont lisibles sans déplier',()=>{
   const selected={...worksheetFilters(),expandedId:String(rows[3].id)};
   const opened=worksheetMarkup(sheet,selected);
   assert.equal((opened.match(/class="ws-detail"/g)||[]).length,1);
   assert.match(opened,/aria-controls="ws-detail-7"/);
   for(const value of ['Essai de démonstration','à revoir','F-4','data-ws-field="comment"'])assert.ok(opened.includes(value));
-  assert.doesNotMatch(worksheetMarkup(sheet,selected,true),/data-ws-field=/);
+  assert.match(opened,/<td colspan="7">/);
+  assert.equal((opened.match(/id="ws-comment-7"/g)||[]).length,1);
+  const archive=worksheetMarkup(sheet,worksheetFilters(),true);
+  assert.doesNotMatch(archive,/data-ws-field=|<textarea|ws-detail-body/);
+  assert.match(archive,/<p class="ws-comment">à revoir<\/p>/);
   assert.doesNotMatch(worksheetMarkup(sheet,{...selected,page:2}),/ws-detail-body/);
 });
 test('Pagination, saisies libres et brouillons sont rendus selon la ligne et échappés',()=>{
@@ -40,6 +46,36 @@ test('Pagination, saisies libres et brouillons sont rendus selon la ligne et éc
   assert.doesNotMatch(withDraft,/<img|<em>/);assert.match(withDraft,/&lt;img&gt;/);
 });
 
+test('Mes retours dénombre les sujets enregistrés indépendamment des filtres et des brouillons',()=>{
+  const examples=[
+    {...rows[0],status:'En cours',revision:3},
+    {...rows[1],priority:'Haute'},
+    {...rows[2],decision:'Reporter',priority:'Basse'},
+    {...rows[3],decision:'',priority:'',comment:'Première ligne\nSeconde ligne'},
+    {...rows[4],comment:'  '},
+  ];
+  const filters={...worksheetFilters(),returnsOnly:true};
+  assert.deepEqual(filterWorksheet(examples,filters),examples.slice(1,4));
+  const restricted={...filters,priority:'Haute'};
+  assert.deepEqual(filterWorksheet(examples,restricted),[examples[1]]);
+  const edits=new Map([[examples[0].id,{id:examples[0].id,values:{comment:'En cours de saisie'}}]]);
+  const html=worksheetMarkup({...sheet,rows:examples},restricted,false,edits);
+  assert.match(html,/id="ws-return-count">3</);
+  assert.match(html,/1 à 1 sur 1 option/);
+  assert.doesNotMatch(html,/En cours de saisie/);
+  assert.equal(filterWorksheet(examples,worksheetFilters()).length,5);
+});
+test('L’historique restaure la vue de ce projet et de ce compte, le lien direct ouvre Mes retours',()=>{
+  const filters={...worksheetFilters(),page:2,returnsOnly:true,code:'Code A',expandedId:'7'};
+  const view=worksheetViewState('projet','compte',filters);
+  assert.deepEqual(restoreWorksheetView(view,'projet','compte',null),{...filters,expandedId:null});
+  assert.deepEqual(restoreWorksheetView(view,'autre','compte',null),worksheetFilters());
+  assert.deepEqual(restoreWorksheetView(view,'projet','autre',null),worksheetFilters());
+  assert.deepEqual(restoreWorksheetView(null,'projet','compte','retours'),{...worksheetFilters(),returnsOnly:true});
+  assert.equal(restoreWorksheetView({...view,page:'4'},'projet','compte',null).page,1);
+  assert.equal(worksheetPage(rows,restoreWorksheetView(view,'projet','compte',null)).page,1);
+  assert.ok(!('expandedId' in view));
+});
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
 test('Deux changements rapides utilisent des PATCH sérialisés et la révision confirmée par ligne',async()=>{
   const calls=[],pending=[],accepted=[];
