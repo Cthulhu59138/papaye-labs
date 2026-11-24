@@ -211,12 +211,26 @@ export function createCatalogueSearch(data) {
   };
 }
 
-let searchPromise;
+let cataloguePromise;
+export function loadCatalogue() {
+  if (!cataloguePromise) {
+    cataloguePromise = fetch(new URL('./catalogue.json', import.meta.url)).then(response => {
+      if (!response.ok) throw new Error('Indisponible');
+      return response.json();
+    }).catch(error => {
+      cataloguePromise = undefined;
+      throw error;
+    });
+  }
+  return cataloguePromise;
+}
+
+let search;
 export async function searchCatalogue(query) {
-  if(!searchPromise) searchPromise=fetch(new URL('./catalogue.json',import.meta.url)).then(response=>{
-    if(!response.ok) throw new Error('Indisponible');
-    return response.json();
-  }).then(createCatalogueSearch).catch(error=>{ searchPromise=undefined; throw error; });
-  try {return (await searchPromise)(query);}
+  try {
+    const data = await loadCatalogue();
+    search ??= createCatalogueSearch(data);
+    return search(query);
+  }
   catch {return answer('Le référentiel local est momentanément indisponible.',[{title:'Sources EDF',detail:'Consultez le catalogue officiel ou réessayez.',links:[link('Codifications',LIST_URL),link('Systèmes publiés',SYSTEM_URL)]}]);}
 }
