@@ -40,7 +40,7 @@ function codeTerms(data,c) {
     .replace(/sans circuit sodium/gi,'sanssodium').replace(/hors enceinte/gi,'horsenceinte');
   let support = c.support || g.support;
   if (g.etat === 'Cuivre') support = 'Cuivre métal non ferreux';
-  const text = [s.famille, s.travaux, milieu, support, g.etat, g.fonction, g.temperature]
+  const text = [c.serie, s.famille, s.travaux, milieu, support, g.etat, g.fonction, g.temperature]
     .join(' ').replace(/non ferreux/gi,'nonferreux').replace(/acier inoxydable/gi,'acier inox')
     .replace(/contr[e] la corrosion/gi,'corrosion');
   return new Set(words(text));
@@ -236,9 +236,11 @@ function hotSteelOptions(data, terms, tokens, t) {
   for (const c of data.couples) {
     const g = data.groupes[c.groupe];
     if (!c.fnp.length || !/^Surface (très )?chaude$/.test(g.etat) || surfaceOf(data,c) !== 'Métal ferreux') continue;
-    if (!remaining.every(token => terms.get(c).has(token))) continue;
     const proof = temperatureEvidence(data,c,c.fnp,t);
     if (!proof.systems.length) continue;
+    const dryInterior = proof.systems[0] === 106 && hasReviewed106(data,c);
+    const documented = token => terms.get(c).has(token) || (token === 'sec' && dryInterior);
+    if (!remaining.every(documented)) continue;
     const s = data.series[c.serie];
     const condition = s.travaux + ' · ' + s.milieu + ' ' + g.etat + ' : ' + g.temperature +
       '. Vérifiez la température de surface en service et la préparation de l’acier brut dans la fiche technique.';

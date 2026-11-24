@@ -114,6 +114,13 @@ test('PAP : les pistes pour acier chaud indiquent le seuil et la préparation à
   assert.deepEqual(hot.alternatives.map(a=>a.title), ['EIA 105']);
   assert.match(hot.alternatives[0].detail,/intérieur sec.*500 °C.*Sa 3.*Moyen G.*durcissement/);
   assert.ok(hot.alternatives[0].links.some(l=>l.url===catalog.systemes[106].ft));
+  for (const milieu of ['intérieur', 'intérieur sec']) {
+    const candidate = search(`EIA acier brut ${milieu} peu corrosif entretien 200 °C`).alternatives;
+    assert.deepEqual(candidate.map(a=>a.title), ['EIA 105']);
+    assert.match(candidate[0].detail, /intérieur sec.*500 °C.*Sa 3/);
+    assert.ok(candidate[0].links.some(l=>l.url===catalog.systemes[106].ft));
+  }
+  assert.equal(search('EEA acier brut intérieur sec entretien 200 °C').alternatives, undefined);
   const unspecified = search('acier brut intérieur peu corrosif entretien surface chaude');
   assert.deepEqual(unspecified.alternatives.map(a=>a.title), ['EIA 104','EIA 105']);
   assert.match(unspecified.alternatives[0].detail,/60 °C < T ≤ 120 °C.*préparation de l’acier brut/);
