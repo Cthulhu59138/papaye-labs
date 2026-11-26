@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture} from './helpers.mjs';
-import {QUESTIONNAIRE_PATH} from '../../public/code-papaye-questionnaire.mjs';
+import {automationSections, QUESTIONNAIRE_PATH} from '../../public/code-papaye-questionnaire.mjs';
 
 test('Code Papaye questionnaire saves optional multiple choices and free text privately',async t=>{
   const x=fixture(t);
@@ -33,4 +33,29 @@ test('Code Papaye questionnaire saves optional multiple choices and free text pr
   assert.equal((await get()).status,200);
   assert.equal((await x.call('/api/logout',{...s,method:'POST'})).status,200);
   assert.equal((await get()).status,401);
+});
+
+test('automation ratings are private, single-choice and survive older clients',async t=>{
+  const x=fixture(t);
+  x.sql.prepare('INSERT INTO projects(id,name,description,url,source,updated_at) VALUES (?,?,?,?,?,?)').run('code-papaye','Code Papaye','','','',0);
+  const session=await x.login();
+  const save=data=>x.call(QUESTIONNAIRE_PATH,{...session,method:'PATCH',data});
+  const questions=automationSections.flatMap(([,items])=>items);
+  assert.equal(questions.length,60);
+  assert.equal(new Set(questions.map(([key])=>key)).size,60);
+  const first=questions[0][0], last=questions.at(-1)[0];
+  const previous={answers:{situations_entrees:['ps','ts']},comment:'Commentaire initial',revision:0};
+  assert.equal((await save(previous)).status,200);
+  assert.equal((await save({...previous,revision:1,answers:{[first]:['utile','hors_sujet']}})).status,400);
+  const rated={...previous,revision:1,answers:{...previous.answers,[first]:['prioritaire'],[last]:['hors_sujet']}};
+  const saved=await save(rated);
+  assert.equal(saved.status,200,await saved.clone().text());
+  assert.deepEqual((await saved.json()).answers,rated.answers);
+  const older=await save({...previous,revision:2});
+  assert.deepEqual((await older.json()).answers,rated.answers);
+  const clear=await save({...rated,revision:3,answers:{...rated.answers,[last]:[]}});
+  assert.equal(clear.status,200);
+  const data=await (await x.call(QUESTIONNAIRE_PATH,session)).json();
+  assert.deepEqual(data.answers,{...rated.answers,[last]:[]});
+  assert.equal(data.comment,previous.comment);
 });
