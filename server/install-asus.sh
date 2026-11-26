@@ -14,6 +14,7 @@ chown -R root:root /opt/papaye-api/node
 chmod -R a+rX /opt/papaye-api/node
 for file in http.mjs database.mjs portal.mjs password.mjs admin.mjs backup.mjs schema.sql export-worksheet.mjs export-worksheet.py; do install -o root -g root -m 644 "$stage/$file" "/opt/papaye-api/app/$file"; done
 install -o root -g root -m 644 "$stage/../public/code-papaye-questionnaire.mjs" /opt/papaye-api/public/code-papaye-questionnaire.mjs
+install -o root -g root -m 644 "$stage/../public/propositions-code-papaye.mjs" /opt/papaye-api/public/propositions-code-papaye.mjs
 install -d -o papaye-api -g papaye-api -m 700 /var/lib/papaye-api /var/lib/papaye-api/backups
 install -d -o root -g papaye-api -m 750 /etc/papaye-api
 umask 077

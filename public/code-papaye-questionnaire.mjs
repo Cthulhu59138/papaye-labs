@@ -1,3 +1,5 @@
+import {propositions} from './propositions-code-papaye.mjs';
+
 export const QUESTIONNAIRE_PATH = '/api/projects/code-papaye/questionnaire';
 export const COMMENT_LIMIT = 4000;
 
@@ -78,14 +80,22 @@ export const sections = [
       ['fatigue','Fatigue, instabilité et rupture'], ['epreuve','Épreuves, classement et requalification']]]]],
 ];
 
-const allowed = new Map(sections.flatMap(([, questions]) => questions.map(([key,, choices]) =>
+const priorities = [
+  ['prioritaire','Prioritaire'], ['utile','Utile'], ['plus_tard','Plus tard'],
+  ['hors_sujet','Hors sujet'], ['incertain','À clarifier'],
+];
+export const automationSections = propositions.map(([topic, entries]) =>
+  [topic, entries.map(([id, label]) => ['auto_'+id, label, priorities])]);
+export const automationKeys = new Set(automationSections.flatMap(([, questions]) => questions.map(([key]) => key)));
+
+const allowed = new Map([...sections,...automationSections].flatMap(([, questions]) => questions.map(([key,, choices]) =>
   [key, new Set(choices.map(([value]) => value))])));
 
 export function validAnswers(answers) {
   return !!answers && typeof answers === 'object' && !Array.isArray(answers) &&
     Object.entries(answers).every(([key, choices]) => {
       const options = allowed.get(key);
-      return options && Array.isArray(choices) && new Set(choices).size === choices.length &&
+      return options && Array.isArray(choices) && (!automationKeys.has(key) || choices.length <= 1) && new Set(choices).size === choices.length &&
         choices.every(choice => options.has(choice));
     });
 }

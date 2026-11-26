@@ -1,7 +1,7 @@
 import {hashPassword, verifyPassword} from './password.mjs';
 import {timingSafeEqual} from 'node:crypto';
 import {exportWorksheet} from './export-worksheet.mjs';
-import {QUESTIONNAIRE_PATH, COMMENT_LIMIT, validAnswers} from '../public/code-papaye-questionnaire.mjs';
+import {QUESTIONNAIRE_PATH, COMMENT_LIMIT, automationKeys, validAnswers} from '../public/code-papaye-questionnaire.mjs';
 const OWNER_ID = 47718344;
 const OWNER = 'Cthulhu59138';
 const encode = value => btoa(String.fromCharCode(...value)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
@@ -174,7 +174,12 @@ async function questionnaire(req, env) {
   fields(data,['answers','comment','revision']);
   if (!validAnswers(data.answers) || typeof data.comment !== 'string' || data.comment.length > COMMENT_LIMIT ||
       !Number.isSafeInteger(data.revision) || data.revision < 0) throw new HttpError(400,'Réponses invalides.');
-  const values = [JSON.stringify(data.answers),data.comment,now()];
+  // Older frontends omit the automation fields. An explicit [] still clears a choice.
+  const answers = {...data.answers};
+  if (previous) for (const [key, choices] of Object.entries(JSON.parse(previous.answers))) {
+    if (automationKeys.has(key) && !Object.hasOwn(answers,key)) answers[key] = choices;
+  }
+  const values = [JSON.stringify(answers),data.comment,now()];
   const active = '(SELECT 1 FROM projects WHERE id=? AND archived=0)';
   const saved = data.revision === 0 ?
     await env.DB.prepare('INSERT INTO project_questionnaire(project_id,answers,comment,updated_at,revision) SELECT ?,?,?,?,1 WHERE EXISTS '+active+' ON CONFLICT DO NOTHING RETURNING '+fieldsSql).bind(project,...values,project).first() :

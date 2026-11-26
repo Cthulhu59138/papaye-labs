@@ -1,4 +1,4 @@
-import {QUESTIONNAIRE_PATH, sections, COMMENT_LIMIT} from './code-papaye-questionnaire.mjs';
+import {QUESTIONNAIRE_PATH, sections, automationSections, COMMENT_LIMIT} from './code-papaye-questionnaire.mjs';
 
 let draft = null;
 export const hasQuestionnaireDraft = () => draft !== null;
@@ -32,7 +32,21 @@ export function mountQuestionnaire(panel, api, archived) {
   }
 
   function render(data) {
+    const automationLink = location.hash === '#automatisations';
+    const proposalCount = automationSections.reduce((sum,[,questions])=>sum+questions.length,0);
     body.innerHTML = `<form class="questionnaire-form">
+      <details id="automatisations" class="questionnaire-group questionnaire-automations" open>
+        <summary><span>Automatisations à prioriser</span><span class="questionnaire-count" data-total></span></summary>
+        <p>Indique ce qui te ferait gagner du temps au travail. Pour chaque proposition, tu peux choisir « Prioritaire », « Utile », « Plus tard », « Hors sujet » ou « À clarifier ». Tu peux laisser les autres lignes sans réponse.</p>
+        ${automationSections.map(([title, questions], index) => `<details class="questionnaire-group"${index === 0 ? ' open' : ''}>
+          <summary><span>${title}</span><span class="questionnaire-count" data-group-count></span></summary>
+          ${questions.map(([key,label,choices]) => `<div class="automation-row"><label for="${key}">${label}</label>
+            <select id="${key}" name="${key}"><option value="">Sans réponse</option>${choices.map(([value, label])=>`<option value="${value}">${label}</option>`).join('')}</select>
+          </div>`).join('')}
+        </details>`).join('')}
+      </details>
+      <details class="questionnaire-group questionnaire-usage"${automationLink ? '' : ' open'}>
+        <summary>Questionnaire d’usage initial</summary>
       <p>Coche autant de réponses que tu veux. Tu peux laisser des questions vides et revenir modifier tes choix.</p>
       <p class="muted">Indique les valeurs que tu utilises dans tes calculs, comme PS, TS ou l’épaisseur de calcul. Une référence courte suffit si tu veux préciser leur origine.</p>
       ${sections.map(([title, questions], index) => `<details class="questionnaire-group"${index === 0 ? ' open' : ''}>
@@ -41,8 +55,9 @@ export function mountQuestionnaire(panel, api, archived) {
           <div class="questionnaire-options">${choices.map(([value,label]) => `<label><input type="checkbox" name="${key}" value="${value}"><span>${label}</span></label>`).join('')}</div>
         </fieldset>`).join('')}
       </details>`).join('')}
+      </details>
       <div class="questionnaire-comment"><label for="questionnaire-comment">Commentaire libre</label>
-        <p id="questionnaire-help" class="muted">Décris un cas typique. Quelles valeurs as-tu au départ, quel calcul veux-tu faire et quelle décision veux-tu pouvoir prendre ?</p>
+        <p id="questionnaire-help" class="muted">Décris une liaison utile, une proposition à écarter ou une donnée qui manque. Garde les références et valeurs métier sur ton poste.</p>
         <textarea id="questionnaire-comment" name="comment" rows="6" maxlength="${COMMENT_LIMIT}" aria-describedby="questionnaire-help" placeholder="Par exemple, j’ai deux mesures d’épaisseur et une vitesse de perte. Je veux connaître l’épaisseur projetée et la marge jusqu’au prochain arrêt."></textarea>
       </div>
       <div class="questionnaire-actions">
@@ -52,27 +67,33 @@ export function mountQuestionnaire(panel, api, archived) {
     </form>`;
     const form = body.querySelector('form');
     const status = form.querySelector('[role="status"]');
-    const fields = [...form.querySelectorAll('input[type="checkbox"], textarea')];
+    const fields = [...form.querySelectorAll('input[type="checkbox"], select, textarea')];
     for (const field of fields) {
       if (field.name === 'comment') field.value = data.comment;
+      else if (field.matches('select')) field.value = data.answers[field.name]?.[0] ?? '';
       else field.checked = data.answers[field.name]?.includes(field.value) ?? false;
       field.disabled = archived;
     }
     const button = form.querySelector('button[type="submit"]');
     function count() {
-      for (const group of form.querySelectorAll('.questionnaire-group')) {
-        const total = group.querySelectorAll('input:checked').length;
-        group.querySelector('[data-group-count]').textContent = total ? `${total} choix` : '';
+      for (const counter of form.querySelectorAll('[data-group-count]')) {
+        const group = counter.closest('details');
+        const total = group.querySelectorAll('input:checked').length +
+          [...group.querySelectorAll('select')].filter(field=>field.value).length;
+        counter.textContent = total ? `${total} choix` : '';
       }
+      const rated = [...form.querySelectorAll('.questionnaire-automations select')].filter(field=>field.value).length;
+      form.querySelector('[data-total]').textContent = `${rated}/${proposalCount} évaluées`;
     }
     count();
     status.textContent = archived ? 'Questionnaire archivé.' : draft ? 'Modifications à enregistrer.' : data.revision ? 'Réponses enregistrées.' : '';
+    if (automationLink) form.querySelector('#automatisations').scrollIntoView({block:'start'});
     if (archived) return;
     function readAnswers() {
       const answers = {};
       const formData = new FormData(form);
-      for (const [, questions] of sections)
-        for (const [key] of questions) answers[key] = formData.getAll(key);
+      for (const [, questions] of [...sections,...automationSections])
+        for (const [key] of questions) answers[key] = formData.getAll(key).filter(Boolean);
       return {answers,comment:formData.get('comment'),revision};
     }
     form.addEventListener('input', () => {
@@ -106,7 +127,7 @@ export function mountQuestionnaire(panel, api, archived) {
   panel.addEventListener('toggle', () => {
     if (panel.open && !body.hasChildNodes()) void load();
   });
-  if (location.hash === '#questionnaire' || draft) {
+  if (['#questionnaire','#automatisations'].includes(location.hash) || draft) {
     panel.open = true;
     if (location.hash === '#questionnaire') panel.scrollIntoView({block:'start'});
   }
