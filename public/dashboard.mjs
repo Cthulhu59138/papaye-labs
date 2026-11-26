@@ -1,3 +1,4 @@
+import {clearQuestionnaireDraft, hasQuestionnaireDraft, mountQuestionnaire, questionnaireMarkup} from './dashboard-questionnaire.mjs';
 import {PROJECT_STATUSES,TASK_STATUSES,ACCESS_LABELS,SESSION_KEY,LOGOUT_KEY,escape as e,safeHref,parisDay,dateLabel,dueLabel,projectProgress,activeTasks,sortTasks,filterProjects,filterTasks,parseSession,canShare,validateProject,validateTask} from './dashboard-model.mjs';
 import {setFormBusy,readFormValues} from './dashboard-forms.mjs';
 import {createConfirmation} from './dashboard-confirm.mjs';
@@ -103,7 +104,8 @@ function captureDraft() {
   }
 }
 function purgePrivate({keepDraft=false}={}) {
-  if (keepDraft) captureDraft(); else state.pendingDraft = null;
+  if (keepDraft) captureDraft();
+  else {state.pendingDraft = null;clearQuestionnaireDraft();}
   confirmation.cancel();
   worksheet = null;
   sheetEdits.pause(!keepDraft);
@@ -236,6 +238,7 @@ function projectView() {
   const href=externalProjectUrl(project),source=safeHref(project.source);
   return `<button class="button text back-link" data-view="projects">← Tous mes projets</button>`+
     heading(project.archived ? 'PROJET ARCHIVÉ' : 'FICHE PROJET',project.name,project.description || 'Les idées et les prochaines étapes de ce projet.',`<button class="button" data-action="${project.archived ? 'restore-project' : 'edit-project'}" data-id="${e(project.id)}">${project.archived ? 'Restaurer le projet' : 'Modifier le projet'}</button>`)+
+    (project.id === 'code-papaye' ? questionnaireMarkup() : '')+
     (project.hasWorksheet ? '<section class="panel worksheet-panel" id="project-worksheet" aria-label="Tableau du projet"><p role="status">Chargement du tableau…</p></section>' : '')+
     `${project.archived ? '<div class="notice">Ce projet est archivé. Ses tâches et ses notes sont conservées ; restaure-le pour reprendre le suivi.</div>' : ''}<div class="detail-layout"><div class="detail-main">${project.hasWorksheet && !href && !source ? '' : `<section class="panel launch-panel"><div><span class="small-tag">APPLICATION</span><h2>${e(ACCESS_LABELS[project.accessStatus] || ACCESS_LABELS.unknown)}</h2><p class="muted">${project.accessStatus === 'public' ? 'Son adresse ouvre l’application. Ton suivi et tes notes restent privés.' : project.accessStatus === 'protected' ? 'L’application garde sa propre connexion. Son lien n’ouvre pas ton tableau de bord.' : 'Le suivi est privé. L’accès sans compte à cette application n’a pas été confirmé.'}</p></div><div class="launch-actions">${href ? `<a class="button primary" href="${e(href)}" target="_blank" rel="noopener noreferrer">Ouvrir l’application ↗</a>` : '<span class="muted">Aucune adresse d’application</span>'}${canShare(project) ? `<button class="button" data-action="share" data-id="${e(project.id)}">Copier le lien public</button>` : ''}${source ? `<a class="button text" href="${e(source)}" target="_blank" rel="noopener noreferrer">Ouvrir la ressource ↗</a>` : ''}</div></section>`}<section class="panel"><div class="section-heading"><div><span class="small-tag">PROCHAINES ÉTAPES</span><h2>Tâches <span class="count">${tasks.length}</span></h2></div>${!project.archived ? `<button class="button small" data-action="new-task" data-project="${e(project.id)}">+ Ajouter</button>` : ''}</div>${tasks.length ? `<ul class="task-list">${tasks.map(task=>taskRow(task,{showProject:false,readonly:project.archived})).join('')}</ul>` : '<p class="quiet-empty">Aucune tâche pour le moment.</p>'}</section><section class="panel"><div class="section-heading"><div><span class="small-tag">POUR GARDER LE FIL</span><h2>Notes privées</h2></div>${!project.archived ? `<button class="button text small" data-action="edit-project" data-id="${e(project.id)}" data-focus="project-notes">Modifier</button>` : ''}</div>${project.notes ? `<div class="notes-text">${e(project.notes)}</div>` : '<p class="quiet-empty">Une idée, une décision, quelque chose à ne pas oublier…<br>Ces notes ne sont visibles que dans ton espace.</p>'}</section></div><aside class="detail-aside"><section class="panel project-summary"><span class="small-tag">LE POINT SUR LE PROJET</span><h2>Repères</h2><dl><div><dt>Statut</dt><dd>${statusBadge(project.status)}</dd></div><div><dt>Échéance</dt><dd>${e(dateLabel(project.dueDate))}</dd></div><div><dt>Avancement</dt><dd>${progressMarkup(project)}</dd></div></dl></section>${!project.archived ? `<section class="archive-box"><h3>Mettre de côté</h3><p>L’archivage garde les notes et les tâches, et libère la vue d’ensemble.</p><button class="button small" data-action="archive-project" data-id="${e(project.id)}">Archiver ce projet</button></section>` : ''}</aside></div>`;
 }
@@ -243,6 +246,8 @@ function renderContent({restoreInput}={}) {
   const content=document.querySelector('#content');
   if (!content || !state.authenticated) return;
   content.innerHTML=({overview,projects:projectsView,tasks:tasksView,project:projectView})[state.view]();
+  const questionnaire = document.getElementById('questionnaire');
+  if (questionnaire) mountQuestionnaire(questionnaire,api,projectById(state.selected).archived);
   if (document.getElementById('project-worksheet')) showWorksheet();
   if (restoreInput) {const input=document.getElementById(restoreInput.id);input?.focus({preventScroll:true});if (typeof restoreInput.start==='number') try {input.setSelectionRange(restoreInput.start,restoreInput.end);} catch {}}
 }
@@ -598,7 +603,7 @@ async function copyUrl() {
 }
 async function logout() {
   const epoch=state.epoch;
-  if(state.editor?.dirty||state.pendingDraft||sheetEdits.list().length) {
+  if(state.editor?.dirty||state.pendingDraft||sheetEdits.list().length||hasQuestionnaireDraft()) {
     const accepted=await confirmation.request({title:'Te déconnecter ?',message:'Tes modifications non enregistrées seront abandonnées. Les données déjà enregistrées restent dans ton espace.',confirmLabel:'Abandonner et me déconnecter',destructive:true});
     if(!accepted||epoch!==state.epoch||!state.authenticated)return;
   }
@@ -768,7 +773,7 @@ document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden'&&state.authenticated){purgePrivate({keepDraft:true});loadingScreen();}
   else if(document.visibilityState==='visible'&&state.session)validateSession();
 });
-window.addEventListener('beforeunload',event=>{if(state.editor?.dirty||state.pendingDraft||sheetEdits.list().length){event.preventDefault();event.returnValue='';}});
+window.addEventListener('beforeunload',event=>{if(state.editor?.dirty||state.pendingDraft||sheetEdits.list().length||hasQuestionnaireDraft()){event.preventDefault();event.returnValue='';}});
 async function boot() {
   loadingScreen('Ouverture de ton espace…');
   try {
