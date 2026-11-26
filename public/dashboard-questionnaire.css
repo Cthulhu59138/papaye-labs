@@ -1,0 +1,85 @@
+.questionnaire-panel {
+  margin-block: 1rem;
+  scroll-margin-top: 1rem;
+}
+.questionnaire-panel > summary,
+.questionnaire-group > summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding-block: .45rem;
+}
+.questionnaire-panel > summary {
+  font-size: 1.15rem;
+}
+.questionnaire-form,
+.questionnaire-group[open] {
+  min-width: 0;
+}
+.questionnaire-group {
+  border: 1px solid #ded9d0;
+  border-radius: .8rem;
+  padding: .65rem 1rem;
+  margin-block: .7rem;
+}
+.questionnaire-count {
+  margin-inline-start: .6rem;
+  font-size: .82rem;
+  font-weight: 500;
+}
+.questionnaire-question {
+  border: 0;
+  padding: 0;
+  margin: .9rem 0 1.2rem;
+  min-inline-size: 0;
+}
+.questionnaire-question legend,
+.questionnaire-comment > label {
+  font-weight: 700;
+}
+.questionnaire-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: .35rem .9rem;
+  margin-top: .4rem;
+}
+.questionnaire-options label {
+  display: flex;
+  align-items: flex-start;
+  gap: .6rem;
+  padding: .45rem .5rem;
+  cursor: pointer;
+  border-radius: .35rem;
+}
+.questionnaire-options input[type="checkbox"] {
+  flex: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: .1rem 0 0;
+  accent-color: #a94720;
+}
+.questionnaire-options label:has(input:checked) {
+  background: #f8e9dd;
+}
+.questionnaire-comment {
+  margin-top: 1.2rem;
+}
+.questionnaire-comment textarea {
+  display: block;
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  padding: .7rem;
+  border: 1px solid #b9aea1;
+  border-radius: .6rem;
+  box-sizing: border-box;
+}
+.questionnaire-actions {
+  display: flex;
+  align-items: baseline;
+  gap: .8rem;
+  flex-wrap: wrap;
+  margin-top: .9rem;
+}
+.questionnaire-actions p {
+  margin: 0;
+}

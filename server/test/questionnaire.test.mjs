@@ -1,0 +1,36 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {fixture} from './helpers.mjs';
+import {QUESTIONNAIRE_PATH} from '../../public/code-papaye-questionnaire.mjs';
+
+test('Code Papaye questionnaire saves optional multiple choices and free text privately',async t=>{
+  const x=fixture(t);
+  assert.equal((await x.call(QUESTIONNAIRE_PATH)).status,401);
+  assert.equal((await x.call(QUESTIONNAIRE_PATH,{method:'PATCH'})).status,401);
+  x.sql.prepare('INSERT INTO projects(id,name,description,url,source,updated_at) VALUES (?,?,?,?,?,?)').run('code-papaye','Code Papaye','','','',0);
+  const s=await x.login();
+  const get=()=>x.call(QUESTIONNAIRE_PATH,s);
+  const save=(data,options={})=>x.call(QUESTIONNAIRE_PATH,{...s,method:'PATCH',data,...options});
+  const blank=await get();
+  assert.equal(blank.headers.get('cache-control'),'no-store');
+  assert.deepEqual(await blank.json(),{answers:{},comment:'',revision:0,updatedAt:null});
+  const data={answers:{situations_entrees:['ps','ts'],dimensions:['calcul','corrosion']},comment:'Étape 1\n<texte libre>',revision:0};
+  assert.equal((await save(data,{csrf:'bad'})).status,403);
+  assert.equal((await save({...data,answers:{dimensions:['calcul','calcul']}})).status,400);
+  assert.equal((await save({...data,answers:{other:['value']}})).status,400);
+  assert.equal((await save({...data,comment:'a'.repeat(4001)})).status,400);
+  const saved=await save(data);
+  assert.equal(saved.status,200,await saved.clone().text());
+  const {updatedAt,...state}=await saved.json();
+  assert.ok(updatedAt>0);
+  assert.deepEqual(state,{...data,revision:1});
+  assert.equal((await save(data)).status,409);
+  const edit=await save({answers:{},comment:'Autre cas',revision:1});
+  assert.equal(edit.status,200);
+  assert.equal((await (await get()).json()).comment,'Autre cas');
+  x.sql.prepare('UPDATE projects SET archived=1 WHERE id=?').run('code-papaye');
+  assert.equal((await save({...data,revision:2})).status,409);
+  assert.equal((await get()).status,200);
+  assert.equal((await x.call('/api/logout',{...s,method:'POST'})).status,200);
+  assert.equal((await get()).status,401);
+});

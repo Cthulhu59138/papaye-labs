@@ -1,6 +1,7 @@
 import {hashPassword, verifyPassword} from './password.mjs';
 import {timingSafeEqual} from 'node:crypto';
 import {exportWorksheet} from './export-worksheet.mjs';
+import {QUESTIONNAIRE_PATH, COMMENT_LIMIT, validAnswers} from '../public/code-papaye-questionnaire.mjs';
 const OWNER_ID = 47718344;
 const OWNER = 'Cthulhu59138';
 const encode = value => btoa(String.fromCharCode(...value)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
@@ -160,6 +161,28 @@ async function changeWorksheetRow(req,env,projectId,rowId) {
   throw new HttpError(409,'Cette ligne a changé dans une autre fenêtre. Rechargez ses valeurs avant de reprendre la saisie.');
 }
 
+async function questionnaire(req, env) {
+  const fieldsSql = 'answers,comment,revision,updated_at';
+  const project = 'code-papaye';
+  const record = await env.DB.prepare('SELECT archived FROM projects WHERE id=?').bind(project).first();
+  if (!record) throw new HttpError(404,'Projet introuvable.');
+  const previous = await env.DB.prepare('SELECT '+fieldsSql+' FROM project_questionnaire WHERE project_id=?').bind(project).first();
+  const show = row => ({answers:JSON.parse(row.answers), comment:row.comment, revision:row.revision, updatedAt:row.updated_at*1000});
+  if (req.method === 'GET') return response(previous ? show(previous) : {answers:{}, comment:'', revision:0, updatedAt:null});
+  if (record.archived) throw new HttpError(409,'Le projet est archivé.');
+  const data = await body(req);
+  fields(data,['answers','comment','revision']);
+  if (!validAnswers(data.answers) || typeof data.comment !== 'string' || data.comment.length > COMMENT_LIMIT ||
+      !Number.isSafeInteger(data.revision) || data.revision < 0) throw new HttpError(400,'Réponses invalides.');
+  const values = [JSON.stringify(data.answers),data.comment,now()];
+  const active = '(SELECT 1 FROM projects WHERE id=? AND archived=0)';
+  const saved = data.revision === 0 ?
+    await env.DB.prepare('INSERT INTO project_questionnaire(project_id,answers,comment,updated_at,revision) SELECT ?,?,?,?,1 WHERE EXISTS '+active+' ON CONFLICT DO NOTHING RETURNING '+fieldsSql).bind(project,...values,project).first() :
+    await env.DB.prepare('UPDATE project_questionnaire SET answers=?,comment=?,updated_at=?,revision=revision+1 WHERE project_id=? AND revision=? AND EXISTS '+active+' RETURNING '+fieldsSql).bind(...values,project,data.revision,project).first();
+  if (!saved) throw new HttpError(409,'La version enregistrée a changé. Copie tes réponses en cours avant de recharger le questionnaire.');
+  return response(show(saved));
+}
+
 export async function handlePortal(req,env,fetcher=fetch) {
   const path=new URL(req.url).pathname;
   try {
@@ -198,6 +221,7 @@ export async function handlePortal(req,env,fetcher=fetch) {
       return startSession(env,{login:account.login,version},data.remember);
     }
     if(path==='/api/projects'&&req.method==='GET'){const {results}=await env.DB.prepare(projectSelect+' ORDER BY name COLLATE NOCASE').all();return response({projects:results.map(rowProject)});}
+    if (path===QUESTIONNAIRE_PATH && ['GET','PATCH'].includes(req.method)) return await questionnaire(req,env);
     const worksheet = path.match(/^\/api\/projects\/([a-z0-9-]+)\/worksheet(\/download)?$/);
     if (worksheet && req.method==='GET') return await readWorksheet(env,worksheet[1],Boolean(worksheet[2]));
     const worksheetRow = path.match(/^\/api\/projects\/([a-z0-9-]+)\/worksheet\/rows\/([1-9]\d{0,6})$/);
