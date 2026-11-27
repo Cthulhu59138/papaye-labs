@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 
 // One transactional migration handles both a fresh installation and the legacy
 // catalogue. Existing account hashes, sessions, IDs and revisions are untouched.
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 export function database(filename) {
   const sql = new DatabaseSync(filename);
   try {
@@ -72,6 +72,15 @@ export function database(filename) {
           PRAGMA user_version=4;
           COMMIT;
         `);
+      } catch (error) { sql.exec('ROLLBACK'); throw error; }
+    }
+    if (version < 5) {
+      sql.exec('BEGIN IMMEDIATE');
+      try {
+        if (!sql.prepare('PRAGMA table_info(project_questionnaire)').all().some(column => column.name === 'question_comments')) {
+          sql.exec("ALTER TABLE project_questionnaire ADD COLUMN question_comments TEXT NOT NULL DEFAULT '{}';");
+        }
+        sql.exec('PRAGMA user_version=5; COMMIT;');
       } catch (error) { sql.exec('ROLLBACK'); throw error; }
     }
     if (sql.prepare('PRAGMA foreign_key_check').all().length) throw new Error('Database foreign key integrity check failed.');

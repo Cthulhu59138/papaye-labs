@@ -3,6 +3,7 @@ import {isIP} from 'node:net';
 import {readFileSync} from 'node:fs';
 import {database} from './database.mjs';
 import {handlePortal} from './portal.mjs';
+import {QUESTIONNAIRE_PATH, QUESTIONNAIRE_BODY_LIMIT} from '../public/code-papaye-questionnaire.mjs';
 
 export function createPortalServer(env) {
   const allowedHeaders=new Set(['authorization','content-type','x-csrf-token']);
@@ -24,10 +25,11 @@ export function createPortalServer(env) {
     if(req.url==='/health'&&req.method==='GET'){res.end('{"status":"ok","service":"papaye-api"}');return;}
     if(!req.url?.startsWith('/api/'))return fail(404,'Page introuvable.');
     if(!['GET','POST','PATCH','DELETE'].includes(req.method))return fail(405,'Méthode non autorisée.');
-    if(Number(req.headers['content-length']||0)>48000)return fail(413,'Contenu trop long.');
+    const limit=req.method==='PATCH'&&req.url.split('?')[0]===QUESTIONNAIRE_PATH ? QUESTIONNAIRE_BODY_LIMIT : 48000;
+    if(Number(req.headers['content-length']||0)>limit)return fail(413,'Contenu trop long.');
     try {
       const chunks=[];let size=0;
-      for await(const chunk of req){size+=chunk.length;if(size>48000)return fail(413,'Contenu trop long.');chunks.push(chunk);}
+      for await(const chunk of req){size+=chunk.length;if(size>limit)return fail(413,'Contenu trop long.');chunks.push(chunk);}
       const headers=new Headers();
       for(const [key,value] of Object.entries(req.headers))if(typeof value==='string')headers.set(key,value);
       // The only listener is loopback. Tailscale's reverse proxy appends its client address.

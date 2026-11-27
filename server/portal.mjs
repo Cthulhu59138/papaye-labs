@@ -1,7 +1,7 @@
 import {hashPassword, verifyPassword} from './password.mjs';
 import {timingSafeEqual} from 'node:crypto';
 import {exportWorksheet} from './export-worksheet.mjs';
-import {QUESTIONNAIRE_PATH, COMMENT_LIMIT, automationKeys, validAnswers} from '../public/code-papaye-questionnaire.mjs';
+import {QUESTIONNAIRE_PATH, COMMENT_LIMIT, QUESTIONNAIRE_BODY_LIMIT, automationKeys, validAnswers, validQuestionComments} from '../public/code-papaye-questionnaire.mjs';
 const OWNER_ID = 47718344;
 const OWNER = 'Cthulhu59138';
 const encode = value => btoa(String.fromCharCode(...value)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
@@ -65,7 +65,7 @@ async function startSession(env,account,remember=false) {
   return response({ok:true,authenticated:true,login:account.login,csrf,configured:true,sessionToken:sid,expiresAt:(now()+duration)*1000});
 }
 function authorizeWrite(req,env,s) {if(req.headers.get('origin')!==env.APP_ORIGIN || req.headers.get('x-csrf-token')!==s.csrf)throw new HttpError(403,'La session a changé. Rechargez la page.');}
-async function body(req) {if(req.headers.get('content-type')?.split(';')[0].trim().toLowerCase()!=='application/json')throw new HttpError(415,'Format invalide.');const text=await req.text();if(Buffer.byteLength(text,'utf8')>48000)throw new HttpError(413,'Contenu trop long.');try{const data=JSON.parse(text);if(!data||typeof data!=='object'||Array.isArray(data))throw Error();return data;}catch{throw new HttpError(400,'Contenu invalide.');}}
+async function body(req,maxBytes=48000) {if(req.headers.get('content-type')?.split(';')[0].trim().toLowerCase()!=='application/json')throw new HttpError(415,'Format invalide.');const text=await req.text();if(Buffer.byteLength(text,'utf8')>maxBytes)throw new HttpError(413,'Contenu trop long.');try{const data=JSON.parse(text);if(!data||typeof data!=='object'||Array.isArray(data))throw Error();return data;}catch{throw new HttpError(400,'Contenu invalide.');}}
 const PROJECT_STATUSES = new Set(['À qualifier','Idée','En préparation','En cours','En pause','Terminé']);
 const TASK_STATUSES = new Set(['À faire','En cours','Terminé']);
 const WORKSHEET_PRIORITIES = ['1 – Haute','2 – Moyenne','3 – Basse','Non prioritaire'];
@@ -162,28 +162,34 @@ async function changeWorksheetRow(req,env,projectId,rowId) {
 }
 
 async function questionnaire(req, env) {
-  const fieldsSql = 'answers,comment,revision,updated_at';
+  const fieldsSql = 'answers,comment,question_comments,revision,updated_at';
   const project = 'code-papaye';
   const record = await env.DB.prepare('SELECT archived FROM projects WHERE id=?').bind(project).first();
   if (!record) throw new HttpError(404,'Projet introuvable.');
   const previous = await env.DB.prepare('SELECT '+fieldsSql+' FROM project_questionnaire WHERE project_id=?').bind(project).first();
-  const show = row => ({answers:JSON.parse(row.answers), comment:row.comment, revision:row.revision, updatedAt:row.updated_at*1000});
-  if (req.method === 'GET') return response(previous ? show(previous) : {answers:{}, comment:'', revision:0, updatedAt:null});
+  const show = row => ({answers:JSON.parse(row.answers), comment:row.comment, questionComments:JSON.parse(row.question_comments), revision:row.revision, updatedAt:row.updated_at*1000});
+  if (req.method === 'GET') return response(previous ? show(previous) : {answers:{}, comment:'', questionComments:{}, revision:0, updatedAt:null});
   if (record.archived) throw new HttpError(409,'Le projet est archivé.');
-  const data = await body(req);
-  fields(data,['answers','comment','revision']);
+  const data = await body(req,QUESTIONNAIRE_BODY_LIMIT);
+  fields(data,['answers','comment','questionComments','revision']);
   if (!validAnswers(data.answers) || typeof data.comment !== 'string' || data.comment.length > COMMENT_LIMIT ||
+      (Object.hasOwn(data,'questionComments') && !validQuestionComments(data.questionComments)) ||
       !Number.isSafeInteger(data.revision) || data.revision < 0) throw new HttpError(400,'Réponses invalides.');
   // Older frontends omit the automation fields. An explicit [] still clears a choice.
   const answers = {...data.answers};
   if (previous) for (const [key, choices] of Object.entries(JSON.parse(previous.answers))) {
     if (automationKeys.has(key) && !Object.hasOwn(answers,key)) answers[key] = choices;
   }
-  const values = [JSON.stringify(answers),data.comment,now()];
+  const questionComments = previous ? JSON.parse(previous.question_comments) : {};
+  for (const [key,text] of Object.entries(data.questionComments ?? {})) {
+    if (text.trim()) questionComments[key] = text;
+    else delete questionComments[key];
+  }
+  const values = [JSON.stringify(answers),data.comment,JSON.stringify(questionComments),now()];
   const active = '(SELECT 1 FROM projects WHERE id=? AND archived=0)';
   const saved = data.revision === 0 ?
-    await env.DB.prepare('INSERT INTO project_questionnaire(project_id,answers,comment,updated_at,revision) SELECT ?,?,?,?,1 WHERE EXISTS '+active+' ON CONFLICT DO NOTHING RETURNING '+fieldsSql).bind(project,...values,project).first() :
-    await env.DB.prepare('UPDATE project_questionnaire SET answers=?,comment=?,updated_at=?,revision=revision+1 WHERE project_id=? AND revision=? AND EXISTS '+active+' RETURNING '+fieldsSql).bind(...values,project,data.revision,project).first();
+    await env.DB.prepare('INSERT INTO project_questionnaire(project_id,answers,comment,question_comments,updated_at,revision) SELECT ?,?,?,?,?,1 WHERE EXISTS '+active+' ON CONFLICT DO NOTHING RETURNING '+fieldsSql).bind(project,...values,project).first() :
+    await env.DB.prepare('UPDATE project_questionnaire SET answers=?,comment=?,question_comments=?,updated_at=?,revision=revision+1 WHERE project_id=? AND revision=? AND EXISTS '+active+' RETURNING '+fieldsSql).bind(...values,project,data.revision,project).first();
   if (!saved) throw new HttpError(409,'La version enregistrée a changé. Copie tes réponses en cours avant de recharger le questionnaire.');
   return response(show(saved));
 }

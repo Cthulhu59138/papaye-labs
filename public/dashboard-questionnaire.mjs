@@ -1,4 +1,4 @@
-import {QUESTIONNAIRE_PATH, sections, automationSections, COMMENT_LIMIT} from './code-papaye-questionnaire.mjs';
+import {QUESTIONNAIRE_PATH, sections, automationSections, COMMENT_LIMIT, QUESTION_COMMENT_LIMIT} from './code-papaye-questionnaire.mjs';
 
 let draft = null;
 export const hasQuestionnaireDraft = () => draft !== null;
@@ -6,6 +6,14 @@ export function clearQuestionnaireDraft() { draft = null; }
 
 export function questionnaireMarkup() {
   return '<details id="questionnaire" class="panel questionnaire-panel"><summary><span>Questionnaire d’usage</span></summary><div data-questionnaire-body></div></details>';
+}
+
+function questionComment(key) {
+  return `<details class="question-comment">
+    <summary>Commentaire libre<span data-comment-marker></span></summary>
+    <label for="comment-${key}">Préciser cette question (facultatif)</label>
+    <textarea id="comment-${key}" data-question-comment="${key}" maxlength="${QUESTION_COMMENT_LIMIT}" rows="3"></textarea>
+  </details>`;
 }
 
 export function mountQuestionnaire(panel, api, archived) {
@@ -37,11 +45,12 @@ export function mountQuestionnaire(panel, api, archived) {
     body.innerHTML = `<form class="questionnaire-form">
       <details id="automatisations" class="questionnaire-group questionnaire-automations" open>
         <summary><span>Automatisations à prioriser</span><span class="questionnaire-count" data-total></span></summary>
-        <p>Indique ce qui te ferait gagner du temps au travail. Pour chaque proposition, tu peux choisir « Prioritaire », « Utile », « Plus tard », « Hors sujet » ou « À clarifier ». Tu peux laisser les autres lignes sans réponse.</p>
+        <p>Indique ce qui te ferait gagner du temps au travail. Pour chaque proposition, tu peux choisir « Prioritaire », « Utile », « Plus tard », « Hors sujet » ou « À clarifier ». Chaque proposition a son commentaire libre. Tu peux laisser le choix vide.</p>
         ${automationSections.map(([title, questions], index) => `<details class="questionnaire-group"${index === 0 ? ' open' : ''}>
           <summary><span>${title}</span><span class="questionnaire-count" data-group-count></span></summary>
           ${questions.map(([key,label,choices]) => `<div class="automation-row"><label for="${key}">${label}</label>
             <select id="${key}" name="${key}"><option value="">Sans réponse</option>${choices.map(([value, label])=>`<option value="${value}">${label}</option>`).join('')}</select>
+            ${questionComment(key)}
           </div>`).join('')}
         </details>`).join('')}
       </details>
@@ -53,10 +62,11 @@ export function mountQuestionnaire(panel, api, archived) {
         <summary><span>${title}</span><span class="questionnaire-count" data-group-count></span></summary>
         ${questions.map(([key, question, choices]) => `<fieldset class="questionnaire-question"><legend>${question}</legend>
           <div class="questionnaire-options">${choices.map(([value,label]) => `<label><input type="checkbox" name="${key}" value="${value}"><span>${label}</span></label>`).join('')}</div>
+          ${questionComment(key)}
         </fieldset>`).join('')}
       </details>`).join('')}
       </details>
-      <div class="questionnaire-comment"><label for="questionnaire-comment">Commentaire libre</label>
+      <div class="questionnaire-comment"><label for="questionnaire-comment">Commentaire général</label>
         <p id="questionnaire-help" class="muted">Décris une liaison utile, une proposition à écarter ou une donnée qui manque. Garde les références et valeurs métier sur ton poste.</p>
         <textarea id="questionnaire-comment" name="comment" rows="6" maxlength="${COMMENT_LIMIT}" aria-describedby="questionnaire-help" placeholder="Par exemple, j’ai deux mesures d’épaisseur et une vitesse de perte. Je veux connaître l’épaisseur projetée et la marge jusqu’au prochain arrêt."></textarea>
       </div>
@@ -70,10 +80,17 @@ export function mountQuestionnaire(panel, api, archived) {
     const fields = [...form.querySelectorAll('input[type="checkbox"], select, textarea')];
     for (const field of fields) {
       if (field.name === 'comment') field.value = data.comment;
+      else if (field.dataset.questionComment) field.value = data.questionComments?.[field.dataset.questionComment] ?? '';
       else if (field.matches('select')) field.value = data.answers[field.name]?.[0] ?? '';
       else field.checked = data.answers[field.name]?.includes(field.value) ?? false;
       field.disabled = archived;
     }
+    const commentFields = fields.filter(field=>field.dataset.questionComment);
+    function updateCommentMarker(field) {
+      field.closest('details').querySelector('[data-comment-marker]').textContent =
+        field.value.trim() ? ' · renseigné' : '';
+    }
+    commentFields.forEach(updateCommentMarker);
     const button = form.querySelector('button[type="submit"]');
     function count() {
       for (const counter of form.querySelectorAll('[data-group-count]')) {
@@ -94,9 +111,12 @@ export function mountQuestionnaire(panel, api, archived) {
       const formData = new FormData(form);
       for (const [, questions] of [...sections,...automationSections])
         for (const [key] of questions) answers[key] = formData.getAll(key).filter(Boolean);
-      return {answers,comment:formData.get('comment'),revision};
+      const questionComments = Object.fromEntries(commentFields.map(field =>
+        [field.dataset.questionComment,field.value]));
+      return {answers,comment:formData.get('comment'),questionComments,revision};
     }
-    form.addEventListener('input', () => {
+    form.addEventListener('input', event => {
+      if (event.target.dataset.questionComment) updateCommentMarker(event.target);
       draft = readAnswers();
       count();
       status.textContent = 'Modifications à enregistrer.';
