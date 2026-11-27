@@ -20,7 +20,7 @@ test('legacy migration preserves catalogue IDs, revision, account and sessions a
     INSERT INTO sessions VALUES ('test-session','version','test-csrf',9999999999);`);
   old.close();let DB=database(path);
   let p=DB.sql.prepare('SELECT * FROM projects').get();assert.equal(p.id,'legacy');assert.equal(p.revision,7);assert.equal(p.description,'Notes legacy description');assert.equal(p.url,'https://private.example/');assert.equal(p.notes,'');assert.equal(p.status,'À qualifier');assert.equal(p.archived,0);assert.equal(p.access_status,'unknown');
-  assert.equal(DB.sql.prepare('PRAGMA user_version').get().user_version,4);assert.equal(DB.sql.prepare('PRAGMA foreign_keys').get().foreign_keys,1);
+  assert.equal(DB.sql.prepare('PRAGMA user_version').get().user_version,5);assert.equal(DB.sql.prepare('PRAGMA foreign_keys').get().foreign_keys,1);
   assert.equal(DB.sql.prepare('SELECT password FROM account').get().password,'test-hash-not-a-secret');assert.equal(DB.sql.prepare('SELECT count(*) AS n FROM sessions').get().n,1);
   DB.sql.prepare('UPDATE projects SET notes=?,status=?').run('After migration','En cours');DB.sql.close();DB=database(path);
   p=DB.sql.prepare('SELECT * FROM projects').get();assert.equal(p.notes,'After migration');assert.equal(p.status,'En cours');assert.equal(p.revision,7);DB.sql.close();
@@ -46,11 +46,27 @@ test('version 1 catalogue gains private worksheets while retaining existing proj
     VALUES ('example','Projet existant','','','',9,123,'En pause','Note existante');`);
   original.sql.close();
   const migrated=database(path);
-  assert.equal(migrated.sql.prepare('PRAGMA user_version').get().user_version,4);
+  assert.equal(migrated.sql.prepare('PRAGMA user_version').get().user_version,5);
   assert.deepEqual({...migrated.sql.prepare('SELECT revision,status,notes FROM projects WHERE id=?').get('example')},
     {revision:9,status:'En pause',notes:'Note existante'});
   assert.equal(migrated.sql.prepare('SELECT count(*) AS n FROM project_worksheets').get().n,0);
   assert.throws(()=>migrated.sql.prepare('INSERT INTO project_worksheets VALUES (?,?,?)').run('missing','Tableau fictif',Buffer.from('test')),/FOREIGN KEY/);
+  migrated.sql.close();
+});
+
+test('migration from version 4 keeps existing questionnaire state', t=>{
+  const path=join(directory(t),'questionnaire-v4.sqlite');
+  const old=database(path);
+  old.sql.exec("ALTER TABLE project_questionnaire DROP COLUMN question_comments; PRAGMA user_version=4;");
+  old.sql.prepare('INSERT INTO projects(id,name,description,url,source,updated_at) VALUES (?,?,?,?,?,?)')
+    .run('code-papaye','Code Papaye','','','',0);
+  const answers=JSON.stringify({situations_entrees:['ps'],auto_dossier_materiel:['utile']});
+  old.sql.prepare('INSERT INTO project_questionnaire VALUES (?,?,?,?,?)')
+    .run('code-papaye',answers,'Commentaire général',7,1234);
+  old.sql.close();
+  const migrated=database(path);
+  assert.deepEqual({...migrated.sql.prepare('SELECT answers,comment,revision,updated_at,question_comments FROM project_questionnaire').get()},
+    {answers,comment:'Commentaire général',revision:7,updated_at:1234,question_comments:'{}'});
   migrated.sql.close();
 });
 

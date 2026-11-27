@@ -2,6 +2,8 @@ import {propositions} from './propositions-code-papaye.mjs';
 
 export const QUESTIONNAIRE_PATH = '/api/projects/code-papaye/questionnaire';
 export const COMMENT_LIMIT = 4000;
+export const QUESTION_COMMENT_LIMIT = 1000;
+export const QUESTIONNAIRE_BODY_LIMIT = 500_000;
 
 // Keep these keys stable when the wording changes. Saved answers refer to keys.
 export const sections = [
@@ -98,4 +100,10 @@ export function validAnswers(answers) {
       return options && Array.isArray(choices) && (!automationKeys.has(key) || choices.length <= 1) && new Set(choices).size === choices.length &&
         choices.every(choice => options.has(choice));
     });
+}
+
+export function validQuestionComments(comments) {
+  return !!comments && typeof comments === 'object' && !Array.isArray(comments) &&
+    Object.entries(comments).every(([key, text]) =>
+      allowed.has(key) && typeof text === 'string' && text.length <= QUESTION_COMMENT_LIMIT);
 }

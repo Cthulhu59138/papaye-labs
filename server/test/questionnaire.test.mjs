@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture} from './helpers.mjs';
-import {automationSections, QUESTIONNAIRE_PATH} from '../../public/code-papaye-questionnaire.mjs';
+import {automationSections, sections, QUESTION_COMMENT_LIMIT, QUESTIONNAIRE_PATH} from '../../public/code-papaye-questionnaire.mjs';
 
 test('Code Papaye questionnaire saves optional multiple choices and free text privately',async t=>{
   const x=fixture(t);
@@ -13,7 +13,7 @@ test('Code Papaye questionnaire saves optional multiple choices and free text pr
   const save=(data,options={})=>x.call(QUESTIONNAIRE_PATH,{...s,method:'PATCH',data,...options});
   const blank=await get();
   assert.equal(blank.headers.get('cache-control'),'no-store');
-  assert.deepEqual(await blank.json(),{answers:{},comment:'',revision:0,updatedAt:null});
+  assert.deepEqual(await blank.json(),{answers:{},comment:'',questionComments:{},revision:0,updatedAt:null});
   const data={answers:{situations_entrees:['ps','ts'],dimensions:['calcul','corrosion']},comment:'Étape 1\n<texte libre>',revision:0};
   assert.equal((await save(data,{csrf:'bad'})).status,403);
   assert.equal((await save({...data,answers:{dimensions:['calcul','calcul']}})).status,400);
@@ -23,7 +23,7 @@ test('Code Papaye questionnaire saves optional multiple choices and free text pr
   assert.equal(saved.status,200,await saved.clone().text());
   const {updatedAt,...state}=await saved.json();
   assert.ok(updatedAt>0);
-  assert.deepEqual(state,{...data,revision:1});
+  assert.deepEqual(state,{...data,questionComments:{},revision:1});
   assert.equal((await save(data)).status,409);
   const edit=await save({answers:{},comment:'Autre cas',revision:1});
   assert.equal(edit.status,200);
@@ -33,6 +33,34 @@ test('Code Papaye questionnaire saves optional multiple choices and free text pr
   assert.equal((await get()).status,200);
   assert.equal((await x.call('/api/logout',{...s,method:'POST'})).status,200);
   assert.equal((await get()).status,401);
+});
+
+test('per-question comments support both sections, optional choices, validation and clearing',async t=>{
+  const x=fixture(t);
+  x.sql.prepare('INSERT INTO projects(id,name,description,url,source,updated_at) VALUES (?,?,?,?,?,?)').run('code-papaye','Code Papaye','','','',0);
+  const session=await x.login();
+  const save=(data,extra={})=>x.call(QUESTIONNAIRE_PATH,{...session,method:'PATCH',data,...extra});
+  const base={answers:{situations_entrees:['ps']},comment:'Commentaire général',revision:0};
+  const questionComments={situations_entrees:'Question initiale',auto_dossier_materiel:'<précision> sans avis'};
+  assert.equal((await save({...base,questionComments},{csrf:'bad'})).status,403);
+  for (const invalid of [null,[],{absente:'texte'},{situations_entrees:23},{situations_entrees:'a'.repeat(QUESTION_COMMENT_LIMIT+1)}]) {
+    assert.equal((await save({...base,questionComments:invalid})).status,400);
+  }
+  const saved=await save({...base,questionComments});
+  assert.equal(saved.status,200,await saved.clone().text());
+  assert.deepEqual((await saved.json()).questionComments,questionComments);
+  const older=await save({...base,revision:1});
+  assert.deepEqual((await older.json()).questionComments,questionComments);
+  const edited=await save({...base,revision:2,questionComments:{situations_entrees:''}});
+  assert.deepEqual((await edited.json()).questionComments,{auto_dossier_materiel:'<précision> sans avis'});
+  const all=Object.fromEntries([...sections,...automationSections].flatMap(([,questions])=>
+    questions.map(([key])=>[key,'é'.repeat(QUESTION_COMMENT_LIMIT)])));
+  const maximum=await save({...base,revision:3,questionComments:all});
+  assert.equal(maximum.status,200,await maximum.clone().text());
+  const read=await (await x.call(QUESTIONNAIRE_PATH,session)).json();
+  assert.deepEqual(read.questionComments,all);
+  assert.equal(read.comment,base.comment);
+  assert.deepEqual(read.answers,base.answers);
 });
 
 test('automation ratings are private, single-choice and survive older clients',async t=>{
